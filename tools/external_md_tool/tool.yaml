@@ -1,0 +1,10 @@
+name: external_md_tool
+description: Runs the user's existing MD_simulation/MD.py script as an external MD tool.
+entrypoint: ../MD_simulation/MD.py
+inputs:
+  - simulation_config
+outputs:
+  - external_md_result_json
+execution:
+  type: subprocess
+  timeout_seconds: 30

@@ -1,0 +1,5 @@
+Example MD protocol note:
+
+Water simulations are often equilibrated near 300 K before production. For a
+simple first workflow, run short NVT equilibration, inspect temperature and
+energy stability, then extend to longer production runs.

@@ -1,0 +1,10 @@
+name: knowledge_search_tool
+description: Searches local MD papers and force-field notes for relevant evidence.
+entrypoint: src/md_agent/knowledge.py
+inputs:
+  - natural_language_query
+outputs:
+  - ranked_sources
+  - excerpts
+execution:
+  type: python

@@ -1,0 +1,9 @@
+name: md_knowledge_agent
+description: Searches local papers, protocols, and force-field notes for MD evidence.
+inputs:
+  - natural_language_query
+outputs:
+  - ranked_sources
+  - excerpts
+tools:
+  - local_text_search

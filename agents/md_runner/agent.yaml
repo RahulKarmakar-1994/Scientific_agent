@@ -1,0 +1,10 @@
+name: md_runner_agent
+description: Converts structured MD parameters into a calculation run.
+inputs:
+  - simulation_config
+outputs:
+  - result_json
+  - logs
+  - trajectories
+tools:
+  - md_docker_tool

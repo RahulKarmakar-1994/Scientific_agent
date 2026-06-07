@@ -1,0 +1,6 @@
+For early MD tests, keep the timestep conservative. A 1 fs timestep is a common
+safe starting point for systems with high-frequency bonded motion unless
+constraints or coarse-graining justify a larger timestep.
+
+For NVT equilibration, a Langevin thermostat is often useful in prototypes
+because it is robust and easy to control.

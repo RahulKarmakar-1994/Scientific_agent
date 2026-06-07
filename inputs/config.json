@@ -1,0 +1,10 @@
+{
+  "system": "water",
+  "ensemble": "NVT",
+  "temperature_k": 300,
+  "pressure": null,
+  "steps": 1000,
+  "timestep_fs": 1.0,
+  "thermostat": "langevin",
+  "force_field": "custom"
+}

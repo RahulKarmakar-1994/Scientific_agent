@@ -1,0 +1,9 @@
+name: md_analysis_agent
+description: Reads MD outputs and summarizes stability, convergence, and next actions.
+inputs:
+  - result_json
+outputs:
+  - analysis_report
+  - plots
+tools:
+  - local_analysis

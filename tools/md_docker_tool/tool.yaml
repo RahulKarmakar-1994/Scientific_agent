@@ -1,0 +1,11 @@
+name: md_docker_tool
+description: Runs a molecular dynamics calculation inside a Docker container.
+entrypoint: tools/md_docker_tool/run_md.py
+container_image: md-agent-toy-md
+inputs:
+  - config_json
+outputs:
+  - result_json
+execution:
+  type: docker
+  build_context: tools/md_docker_tool

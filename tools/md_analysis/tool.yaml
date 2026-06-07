@@ -1,0 +1,9 @@
+name: md_analysis_tool
+description: Analyzes MD outputs and reports stability, energy, and temperature summaries.
+entrypoint: src/md_agent/analysis.py
+inputs:
+  - result_json
+outputs:
+  - analysis_report
+execution:
+  type: python
