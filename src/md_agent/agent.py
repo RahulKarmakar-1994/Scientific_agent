@@ -7,6 +7,7 @@ from .langchain_agent import run_langchain_tool_agent
 from .llm import LLMClient
 from .parser import parse_md_request
 from .runner import MDRunner
+from .workflow_orchestrator import WorkflowOrchestrator
 
 
 class MDAgentWorkbench:
@@ -98,11 +99,24 @@ def main():
     )
     parser.add_argument(
         "--mode",
-        choices=["workflow", "tool-agent"],
+        choices=["workflow", "tool-agent", "orchestrate"],
         default="workflow",
-        help="Run deterministic workflow mode or LangChain tool-agent mode.",
+        help="Run deterministic workflow, LangChain tool-agent, or YAML orchestrator mode.",
+    )
+    parser.add_argument(
+        "--workflow",
+        default="workflows/basic_md_workflow.yaml",
+        help="Workflow YAML path for orchestrate mode.",
     )
     args = parser.parse_args()
+
+    if args.mode == "orchestrate":
+        report = WorkflowOrchestrator(engine=args.engine).run(
+            workflow_path=args.workflow,
+            request=args.query,
+        )
+        print(json.dumps(report, indent=2))
+        return
 
     if args.mode == "tool-agent":
         report = run_langchain_tool_agent(

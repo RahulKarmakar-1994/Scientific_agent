@@ -5,3 +5,5 @@ openai
 langchain
 langchain-google-genai
 python-dotenv
+PyYAML
+numba

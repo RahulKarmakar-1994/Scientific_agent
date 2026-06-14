@@ -1,0 +1,15 @@
+name: basic_md_workflow
+description: Parse an MD request, search knowledge, run MD, analyze output, and write a report.
+steps:
+  - name: setup
+    agent: md_setup_agent
+  - name: gather_knowledge
+    agent: md_knowledge_agent
+    with:
+      limit: 3
+  - name: run_simulation
+    agent: md_runner_agent
+  - name: analyze
+    agent: md_analysis_agent
+  - name: report
+    agent: md_report_agent

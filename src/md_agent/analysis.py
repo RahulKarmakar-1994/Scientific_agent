@@ -14,6 +14,19 @@ def analyze_md_result(result):
 
     config = result["config"]
     summary = result["summary"]
+    if result.get("engine") == "external_md_config":
+        return {
+            "stability": "completed",
+            "steps_completed": summary.get("steps_completed", 0),
+            "final_energy": summary.get("final_energy"),
+            "mean_temperature_k": summary.get("mean_temperature_k"),
+            "temperature_error_k": None,
+            "notes": [
+                "External MD completed using the config-driven wrapper.",
+                "Temperature is reported in the units produced by the external MD code; no Kelvin conversion is applied yet.",
+            ],
+        }
+
     if summary.get("mean_temperature_k") is None:
         return {
             "stability": "completed-unparsed",

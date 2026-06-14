@@ -1,0 +1,8 @@
+name: md_report_agent
+description: Writes a short report from workflow state and tool outputs.
+inputs:
+  - workflow_state
+outputs:
+  - report_markdown
+tools:
+  - report_writer

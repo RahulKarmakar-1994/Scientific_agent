@@ -1,0 +1,8 @@
+name: md_setup_agent
+description: Builds structured MD simulation configuration from a user request.
+inputs:
+  - natural_language_query
+outputs:
+  - simulation_config
+tools:
+  - parse_md_request

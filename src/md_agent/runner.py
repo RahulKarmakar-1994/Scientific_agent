@@ -123,11 +123,10 @@ class MDRunner:
 
         return json.loads(output_path.read_text(encoding="utf-8"))
 
-    def run_external_md(self, config, script_name="MD.py", timeout_seconds=30):
+    def run_external_md(self, config, script_name="run_md_config.py", timeout_seconds=60):
         """Run the user's existing MD_simulation script as an external tool.
 
-        This is a first integration step. The script currently has hardcoded
-        parameters, so the config is recorded for provenance but not injected.
+        The external wrapper accepts JSON config and writes JSON results.
         """
         md_dir = self.external_md_dir.resolve()
         script_path = md_dir / script_name
@@ -138,12 +137,20 @@ class MDRunner:
                 f"External MD script not found: {script_path}",
             )
 
-        config_path = self.output_dir / "external_md_requested_config.json"
+        config_path = self.input_dir / "external_md_config.json"
+        output_path = self.output_dir / "external_md_result.json"
         config_path.write_text(json.dumps(config, indent=2), encoding="utf-8")
 
         try:
             completed = subprocess.run(
-                [sys.executable, script_name],
+                [
+                    sys.executable,
+                    script_name,
+                    "--config",
+                    str(config_path.resolve()),
+                    "--output",
+                    str(output_path.resolve()),
+                ],
                 cwd=md_dir,
                 check=False,
                 capture_output=True,
@@ -158,7 +165,6 @@ class MDRunner:
                 stderr=exc.stderr,
             )
 
-        output_path = self.output_dir / "external_md_result.json"
         if completed.returncode != 0:
             result = self._external_failure(
                 config,
@@ -166,22 +172,23 @@ class MDRunner:
                 stdout=completed.stdout,
                 stderr=completed.stderr,
             )
+        elif output_path.exists():
+            result = json.loads(output_path.read_text(encoding="utf-8"))
+            result["stdout_tail"] = _tail(completed.stdout)
+            result["stderr_tail"] = _tail(completed.stderr)
         else:
             result = {
                 "config": config,
-                "status": "completed",
+                "status": "failed",
                 "engine": "external_md",
+                "error": "External MD completed but did not write output JSON.",
                 "summary": {
                     "final_energy": None,
                     "mean_temperature_k": None,
-                    "steps_completed": int(config.get("steps", 0)),
+                    "steps_completed": 0,
                 },
                 "stdout_tail": _tail(completed.stdout),
                 "stderr_tail": _tail(completed.stderr),
-                "notes": [
-                    "External MD script completed, but structured energy/temperature outputs are not parsed yet.",
-                    "Next step: refactor MD_simulation to accept config JSON and write result JSON.",
-                ],
             }
 
         output_path.write_text(json.dumps(result, indent=2), encoding="utf-8")

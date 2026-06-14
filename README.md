@@ -24,13 +24,15 @@ md-agent-workbench/
 │   └── papers/
 ├── src/md_agent/
 │   ├── agent.py
+│   ├── agent_registry.py
 │   ├── analysis.py
 │   ├── knowledge.py
 │   ├── langchain_agent.py
 │   ├── llm.py
 │   ├── parser.py
 │   ├── runner.py
-│   └── tool_registry.py
+│   ├── tool_registry.py
+│   └── workflow_orchestrator.py
 ├── tools/md_docker_tool/
 │   ├── Dockerfile
 │   ├── run_md.py
@@ -39,6 +41,7 @@ md-agent-workbench/
 ├── tools/md_analysis/tool.yaml
 ├── inputs/
 ├── outputs/
+├── workflows/basic_md_workflow.yaml
 └── requirements.txt
 ```
 
@@ -54,6 +57,16 @@ Run the deterministic workflow without any LLM:
 
 ```bash
 python -m src.md_agent.agent --mode workflow --no-llm --engine local "Run NVT MD for water at 300 K"
+```
+
+Run the YAML workflow orchestrator:
+
+```bash
+python -m src.md_agent.agent \
+  --mode orchestrate \
+  --engine local \
+  --workflow workflows/basic_md_workflow.yaml \
+  "Run NVT MD for water at 300 K for 20 steps"
 ```
 
 The app works without an LLM key. In that case it uses the local rule-based
@@ -174,37 +187,71 @@ Later, replace `tools/md_docker_tool/run_md.py` with your custom MD code interfa
 ## External MD Folder
 
 The project can also call the sibling `MD_simulation/MD.py` folder as an
-external subprocess tool:
+external subprocess tool. The external tool now reads JSON config and writes
+JSON result files through `MD_simulation/run_md_config.py`:
 
 ```bash
 python -m src.md_agent.agent \
   --mode workflow \
   --no-llm \
   --engine external-md \
-  "Run NVE MD with my external MD code"
+  "Run NVE MD using Particle-256/system.data for 5 steps with dt 0.005 and cutoff 2.5"
 ```
 
-The current external script is still hardcoded and may run longer than the
-agent timeout. The next refactor should make `MD_simulation` accept config JSON
-and write structured result JSON so the agent can analyze physical outputs.
+The agent converts the natural-language request into config and passes it to
+the external MD wrapper. Results are written to `outputs/external_md_result.json`.
 
 ## Current Architecture
 
 ```text
 User query
   -> agent.py
-  -> parser.py
-  -> knowledge.py
-  -> optional llm.py
-  -> runner.py
-       -> local toy MD, or
-       -> Docker tool: tools/md_docker_tool/run_md.py
-  -> analysis.py
-  -> JSON report
+  -> workflow_orchestrator.py
+  -> agent_registry.py
+       -> md_setup_agent
+       -> md_knowledge_agent
+       -> md_runner_agent
+       -> md_analysis_agent
+       -> md_report_agent
+  -> tool_registry.py / runner.py
+  -> JSON report + outputs/latest_workflow_report.md
 ```
 
 `tool_registry.py` describes the local Python tools that will later be wrapped
 as LangChain tools or loaded by a more Discovery-like runtime.
+
+## Bring Your Own Agent
+
+Add an agent manifest:
+
+```text
+agents/my_agent/agent.yaml
+```
+
+Example:
+
+```yaml
+name: my_agent
+description: Does one specialized part of a scientific workflow.
+inputs:
+  - workflow_state
+outputs:
+  - result
+tools:
+  - my_tool
+```
+
+Then add a Python handler in `agent_registry.py` and reference it from a
+workflow file:
+
+```yaml
+steps:
+  - name: my_step
+    agent: my_agent
+```
+
+The orchestrator passes a shared state dictionary from step to step, so agents
+can build long workflows without repeating manual work.
 
 ## Next Improvements
 
