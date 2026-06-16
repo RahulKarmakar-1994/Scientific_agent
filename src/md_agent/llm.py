@@ -1,6 +1,8 @@
 import json
 import os
 import time
+from urllib import error as urlerror
+from urllib import request as urlrequest
 
 
 class LLMClient:
@@ -18,6 +20,8 @@ class LLMClient:
             self._init_gemini()
         elif self.provider == "openai":
             self._init_openai()
+        elif self.provider == "ollama":
+            self._init_ollama()
         else:
             self.error = f"Unsupported LLM_PROVIDER: {self.provider}"
 
@@ -52,6 +56,11 @@ class LLMClient:
         prompt = _report_prompt(query, config, evidence, result_summary, analysis)
         return self._respond(prompt)
 
+    def respond(self, prompt):
+        if not self.available:
+            return None
+        return self._respond(prompt)
+
     def _init_gemini(self):
         if not os.getenv("GEMINI_API_KEY") and not os.getenv("GOOGLE_API_KEY"):
             self.error = "GEMINI_API_KEY is not set"
@@ -75,6 +84,11 @@ class LLMClient:
             self.client = OpenAI()
         except ImportError:
             self.error = "openai package is not installed"
+
+    def _init_ollama(self):
+        self.client = {
+            "base_url": os.getenv("OLLAMA_BASE_URL", "http://127.0.0.1:11434").rstrip("/")
+        }
 
     def _respond(self, prompt):
         self.attempts = []
@@ -130,7 +144,35 @@ class LLMClient:
             )
             return response.output_text
 
+        if self.provider == "ollama":
+            return self._ollama_response(prompt, model)
+
         raise ValueError(f"Unsupported LLM_PROVIDER: {self.provider}")
+
+    def _ollama_response(self, prompt, model):
+        payload = json.dumps(
+            {
+                "model": model,
+                "prompt": prompt,
+                "stream": False,
+            }
+        ).encode("utf-8")
+        request = urlrequest.Request(
+            f"{self.client['base_url']}/api/generate",
+            data=payload,
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
+
+        try:
+            with urlrequest.urlopen(request, timeout=120) as response:
+                data = json.loads(response.read().decode("utf-8"))
+        except urlerror.URLError as exc:
+            raise RuntimeError(f"Ollama request failed: {exc}") from exc
+
+        if "error" in data:
+            raise RuntimeError(data["error"])
+        return data.get("response", "")
 
 
 def _default_model(provider):
@@ -138,6 +180,8 @@ def _default_model(provider):
         return os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
     if provider == "openai":
         return os.getenv("OPENAI_MODEL", "gpt-5.2")
+    if provider == "ollama":
+        return os.getenv("OLLAMA_MODEL", "llama3.2:1b")
     return os.getenv("LLM_MODEL", "")
 
 
@@ -146,6 +190,8 @@ def _candidate_models(provider, primary_model):
         raw = os.getenv("GEMINI_FALLBACK_MODELS", "")
     elif provider == "openai":
         raw = os.getenv("OPENAI_FALLBACK_MODELS", "")
+    elif provider == "ollama":
+        raw = os.getenv("OLLAMA_FALLBACK_MODELS", "")
     else:
         raw = os.getenv("LLM_FALLBACK_MODELS", "")
 

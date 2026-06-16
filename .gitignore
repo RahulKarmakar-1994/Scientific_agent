@@ -5,6 +5,9 @@ __pycache__/
 
 outputs/
 test.out
+.vector_store/
+knowledgebase/physics/*.pdf
+knowledgebase/papers/*.pdf
 
 .pytest_cache/
 .mypy_cache/

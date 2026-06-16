@@ -1,0 +1,16 @@
+name: request_understanding
+description: Resolves natural-language scientific requests into standalone tasks and RAG search queries.
+version: 0.1.0
+inputs:
+  - user_request
+  - conversation_context
+outputs:
+  - uses_context
+  - standalone_request
+  - search_queries
+  - reason
+responsibilities:
+  - Detect whether a user message is a new topic or a follow-up.
+  - Rewrite vague follow-ups into standalone scientific requests.
+  - Produce concise textbook-style search queries for local RAG.
+  - Avoid answering the scientific question directly.

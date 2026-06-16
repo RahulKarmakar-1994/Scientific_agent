@@ -1,0 +1,23 @@
+name: physics_learning
+version: 0.1.0
+description: Teaches physics concepts and optionally creates small runnable Python demonstrations.
+entrypoint: src.scientific_agent.agents.learning_demo_agent:LearningDemoAgent
+capabilities:
+  - concept_explanation
+  - python_demo_generation
+  - safe_demo_execution
+tools:
+  - python_demo_runner
+llm_outputs:
+  concept_explanation:
+    type: text
+  python_demo:
+    type: json
+    required_fields:
+      - concept_answer
+      - demo_plan
+      - code
+safety:
+  - Always explain the concept even if demo code fails.
+  - Execute code only through trusted tools.
+  - Prefer no demo over an incorrect or misleading demo.

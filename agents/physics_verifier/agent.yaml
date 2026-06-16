@@ -1,0 +1,22 @@
+name: physics_verifier
+version: 0.1.0
+description: Reviews physics learning answers against retrieved evidence and tool results.
+entrypoint: src.scientific_agent.agents.verifier_agent:PhysicsVerifierAgent
+capabilities:
+  - answer_verification
+  - evidence_support_check
+  - tool_result_check
+llm_outputs:
+  verification:
+    type: json
+    required_fields:
+      - verdict
+      - confidence
+      - issues
+      - supported_claims
+      - unsupported_claims
+      - suggested_note
+safety:
+  - Prefer caution over false confidence.
+  - Do not invent missing source support.
+  - Treat failed or rejected code as unverified.

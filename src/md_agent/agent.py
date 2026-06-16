@@ -3,9 +3,9 @@ import json
 
 from .analysis import analyze_md_result
 from .knowledge import KnowledgeAgent
-from .langchain_agent import run_langchain_tool_agent
 from .llm import LLMClient
 from .parser import parse_md_request
+from .portable_tool_agent import run_portable_tool_agent
 from .runner import MDRunner
 from .workflow_orchestrator import WorkflowOrchestrator
 
@@ -82,7 +82,7 @@ def main():
     )
     parser.add_argument(
         "--provider",
-        choices=["gemini", "openai"],
+        choices=["gemini", "openai", "ollama"],
         default="gemini",
         help="LLM provider to use when LLM mode is enabled.",
     )
@@ -101,7 +101,7 @@ def main():
         "--mode",
         choices=["workflow", "tool-agent", "orchestrate"],
         default="workflow",
-        help="Run deterministic workflow, LangChain tool-agent, or YAML orchestrator mode.",
+        help="Run deterministic workflow, portable tool-agent, or YAML orchestrator mode.",
     )
     parser.add_argument(
         "--workflow",
@@ -119,8 +119,9 @@ def main():
         return
 
     if args.mode == "tool-agent":
-        report = run_langchain_tool_agent(
+        report = run_portable_tool_agent(
             query=args.query,
+            provider=args.provider,
             model=args.model,
             engine=args.engine,
         )

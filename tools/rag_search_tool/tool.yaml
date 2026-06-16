@@ -1,0 +1,10 @@
+name: rag_search_tool
+description: Searches a local document index built from PDFs, notes, and papers.
+entrypoint: src/scientific_agent/rag.py
+inputs:
+  - query
+outputs:
+  - ranked_chunks
+  - source_citations
+execution:
+  type: python

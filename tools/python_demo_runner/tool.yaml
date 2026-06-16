@@ -1,0 +1,14 @@
+name: python_demo_runner
+description: Runs a short trusted Python learning demo and returns stdout, generated files, and safety notes.
+type: command
+command: python tools/python_demo_runner/run.py
+inputs:
+  - topic
+  - code
+outputs:
+  - stdout
+  - generated_files
+  - safety_notes
+execution:
+  type: command
+  timeout_seconds: 15

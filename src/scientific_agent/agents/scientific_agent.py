@@ -1,0 +1,148 @@
+from .learning_demo_agent import LearningDemoAgent
+from .rag_agent import RAGAgent
+from .router_agent import RouterAgent
+from .simulation_agent import SimulationAgent
+from .verifier_agent import PhysicsVerifierAgent
+from src.scientific_agent.core.job_store import JobStore
+from src.scientific_agent.core.session_store import SessionStore
+
+
+class ScientificAgent:
+    """Top-level product agent for scientific learning and execution."""
+
+    def __init__(self, provider="ollama", model=None, engine="local", index_dir=".vector_store"):
+        self.provider = provider
+        self.model = model
+        self.engine = engine
+        self.job_store = JobStore()
+        self.session_store = SessionStore()
+        self.router = RouterAgent()
+        self.learning_agent = LearningDemoAgent(
+            provider=provider,
+            model=model,
+            index_dir=index_dir,
+        )
+        self.simulation_agent = SimulationAgent(engine=engine)
+        self.rag_agent = RAGAgent(provider=provider, model=model, index_dir=index_dir)
+        self.verifier_agent = PhysicsVerifierAgent(provider=provider, model=model)
+
+    def run(self, request, session_id=None):
+        conversation_context = ""
+        if session_id:
+            conversation_context = self.session_store.context_text(session_id)
+            self.session_store.append_message(session_id, "user", request)
+
+        job_id, job_dir = self.job_store.create(request)
+        if session_id:
+            self.job_store.write_json(
+                job_dir,
+                "session.json",
+                {
+                    "session_id": session_id,
+                    "conversation_context": conversation_context,
+                },
+            )
+
+        routing_request = _with_context(request, conversation_context)
+        route = self.router.route(routing_request)
+        self.job_store.write_json(job_dir, "route.json", route)
+
+        if route["route"] == "simulation":
+            result = self.simulation_agent.run(request)
+        elif route["route"] == "rag":
+            result = self.rag_agent.run(request)
+        else:
+            result = self.learning_agent.run(
+                request,
+                conversation_context=conversation_context,
+            )
+
+        if route["route"] in {"learning_demo", "rag"}:
+            verification = self.verifier_agent.run(request, result)
+            result["verification"] = verification
+            result["final_answer"] = _append_verification_note(
+                result.get("final_answer") or result.get("answer") or "",
+                verification,
+            )
+
+        copied_files = self.job_store.copy_files(job_dir, _generated_files(result))
+        if copied_files:
+            result.setdefault("job_files", {})["artifacts"] = copied_files
+        if result.get("generated_code"):
+            generated_code_path = self.job_store.write_text(
+                job_dir,
+                "generated_code.py",
+                result["generated_code"],
+            )
+            result.setdefault("job_files", {})["generated_code"] = generated_code_path
+
+        self.job_store.write_json(job_dir, "result.json", result)
+        self.job_store.write_text(job_dir, "report.md", _report_text(result))
+        report = {
+            "job_id": job_id,
+            "job_dir": str(job_dir),
+            "session_id": session_id,
+            "request": request,
+            "route": route,
+            "provider": self.provider,
+            "model": self.model,
+            "engine": self.engine,
+            "result": result,
+        }
+        if session_id:
+            self.session_store.append_message(
+                session_id,
+                "assistant",
+                result.get("final_answer") or result.get("answer") or "",
+                metadata={
+                    "job_id": job_id,
+                    "job_dir": str(job_dir),
+                    "route": route,
+                    "status": result.get("status"),
+                },
+            )
+        return report
+
+
+def _generated_files(result):
+    files = []
+    demo_result = result.get("result")
+    if isinstance(demo_result, dict):
+        files.extend(demo_result.get("generated_files") or [])
+    files.extend(result.get("generated_files") or [])
+    return files
+
+
+def _report_text(result):
+    text = result.get("final_answer") or result.get("answer") or ""
+    artifact_paths = (result.get("job_files") or {}).get("artifacts") or []
+    if artifact_paths:
+        text += "\n\nJob-local artifacts:\n"
+        text += "\n".join(f"- {path}" for path in artifact_paths)
+    generated_code_path = (result.get("job_files") or {}).get("generated_code")
+    if generated_code_path:
+        text += "\n\nGenerated code:\n"
+        text += f"- {generated_code_path}"
+    return text
+
+
+def _with_context(request, conversation_context):
+    if not conversation_context:
+        return request
+    return (
+        "Conversation context:\n"
+        f"{conversation_context}\n\n"
+        "Current user request:\n"
+        f"{request}"
+    )
+
+
+def _append_verification_note(answer, verification):
+    if not verification:
+        return answer
+    note = verification.get("suggested_note")
+    verdict = verification.get("verdict")
+    confidence = verification.get("confidence")
+    if not note:
+        note = f"Verifier verdict: {verdict}, confidence: {confidence}."
+    return f"{answer.rstrip()}\n\nVerification: {verdict} ({confidence})\n{note}"
