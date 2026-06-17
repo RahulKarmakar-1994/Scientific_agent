@@ -135,6 +135,8 @@ Current product agents:
 ```text
 RouterAgent -> chooses learning_demo, simulation, or rag
 RequestUnderstandingAgent -> rewrites follow-ups into standalone scientific requests
+SimulationSpecAgent -> maps learning requests to reusable demo specifications
+SimulationSpecVerifierAgent -> blocks misleading demo specs before code generation
 LearningDemoAgent -> answers concepts or generates/runs Python demos through python_demo_runner
 SimulationAgent -> runs MD parse/search/run/analyze workflow
 RAGAgent -> answers from the local document index
@@ -145,6 +147,7 @@ Shared product services:
 
 ```text
 GroundingService -> searches local RAG evidence for learning agents
+demo_primitives -> builds safe code from reusable demo specs, not topic templates
 JobStore -> saves request/result/report/artifacts per run
 SessionStore -> preserves multi-turn context by session id
 ```
@@ -155,6 +158,20 @@ SessionStore -> preserves multi-turn context by session id
 concept_explanation -> no tool call, no generated code, direct teaching answer
 python_demo -> generate/repair/validate/run code through the trusted runner
 ```
+
+For demo requests, the preferred path is:
+
+```text
+request + RAG evidence
+-> SimulationSpecAgent
+-> SimulationSpecVerifierAgent
+-> reusable demo primitive, such as relation_plot or random_walk
+-> python_demo_runner
+```
+
+This avoids adding hardcoded branches like `if topic == "photoelectric"`.
+The model supplies the scientific meaning; Python supplies trusted reusable
+plot/simulation primitives and rejects incomplete or inconsistent specs.
 
 The LLM can classify and generate, but execution is protected by a product
 policy gate: code is run only when the user explicitly asks for code, Python, a

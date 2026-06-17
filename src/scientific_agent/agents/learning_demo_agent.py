@@ -2,6 +2,11 @@ import json
 from pathlib import Path
 
 from src.scientific_agent.agents.request_understanding_agent import RequestUnderstandingAgent
+from src.scientific_agent.agents.simulation_spec_agent import SimulationSpecAgent
+from src.scientific_agent.agents.simulation_spec_verifier_agent import (
+    SimulationSpecVerifierAgent,
+)
+from src.scientific_agent.core.demo_primitives import build_demo_code
 from src.scientific_agent.core.grounding import GroundingService
 from src.scientific_agent.core.llm import LLMClient
 from src.scientific_agent.core.tool_loader import ToolLoader
@@ -22,6 +27,14 @@ class LearningDemoAgent:
         self.max_repair_attempts = max_repair_attempts
         self.agent_spec = _load_agent_spec()
         self.request_understanding_agent = RequestUnderstandingAgent(
+            provider=provider,
+            model=model,
+        )
+        self.simulation_spec_agent = SimulationSpecAgent(
+            provider=provider,
+            model=model,
+        )
+        self.simulation_spec_verifier_agent = SimulationSpecVerifierAgent(
             provider=provider,
             model=model,
         )
@@ -52,7 +65,23 @@ class LearningDemoAgent:
                 "error": "python_demo_runner tool is not available",
             }
 
-        code_payload = self._generate_code(request, grounding, prompt_context)
+        simulation_spec = self.simulation_spec_agent.run(
+            request,
+            grounding=grounding,
+            conversation_context=prompt_context,
+        )
+        simulation_spec_verification = self.simulation_spec_verifier_agent.run(
+            request,
+            simulation_spec,
+            grounding=grounding,
+        )
+        code_payload = self._generate_code(
+            request,
+            grounding,
+            prompt_context,
+            simulation_spec=simulation_spec,
+            simulation_spec_verification=simulation_spec_verification,
+        )
         concept_answer = _clean_concept_answer(
             code_payload.get("concept_answer")
             or self._generate_concept_answer(request, grounding, prompt_context)
@@ -68,6 +97,11 @@ class LearningDemoAgent:
                 "generated_code": None,
                 "result": result,
                 "concept_answer": concept_answer,
+                "simulation_spec": code_payload.get("simulation_spec") or simulation_spec,
+                "simulation_spec_verification": (
+                    code_payload.get("simulation_spec_verification")
+                    or simulation_spec_verification
+                ),
                 "grounding": grounding,
                 "understanding": understanding,
                 "final_answer": _final_answer(request, result, concept_answer, grounding),
@@ -90,14 +124,6 @@ class LearningDemoAgent:
             code = repaired
             code_source = "llm_repaired"
 
-        if result and result.get("status") != "completed" and code_payload["source"] == "llm_generated":
-            fallback = _fallback_python_demo_code(request)
-            if fallback["code"]:
-                code = fallback["code"]
-                code_source = "known_template_after_llm_failure"
-                result = self._execute_code(request, code)
-                attempts.append(_attempt_summary(len(attempts) + 1, code_source, result))
-
         return {
             "agent": "learning_demo",
             "status": result.get("status") if result else "failed",
@@ -108,6 +134,11 @@ class LearningDemoAgent:
             "attempts": attempts,
             "result": result,
             "concept_answer": concept_answer,
+            "simulation_spec": code_payload.get("simulation_spec") or simulation_spec,
+            "simulation_spec_verification": (
+                code_payload.get("simulation_spec_verification")
+                or simulation_spec_verification
+            ),
             "grounding": grounding,
             "understanding": understanding,
             "final_answer": _final_answer(request, result or {}, concept_answer, grounding),
@@ -123,18 +154,12 @@ class LearningDemoAgent:
                 "source": "policy_gate",
             }
 
-        if self.llm.available:
-            parsed = _extract_json(self.llm.respond(_intent_prompt(request)))
-            mode = (parsed or {}).get("mode")
-            if mode in {"concept_explanation", "python_demo"}:
-                return {
-                    "mode": mode,
-                    "reason": (parsed or {}).get("reason", "classified by LLM"),
-                    "needs_code": mode == "python_demo",
-                    "source": "llm",
-                }
-
-        return _fallback_intent(request)
+        return {
+            "mode": "python_demo",
+            "reason": "request explicitly asks for code, Python, demo, plotting, calculation, saved output, or execution",
+            "needs_code": True,
+            "source": "policy_gate",
+        }
 
     def _answer_concept(
         self,
@@ -180,13 +205,50 @@ class LearningDemoAgent:
             "llm": self._llm_status(),
         }
 
-    def _generate_code(self, request, grounding, conversation_context=""):
+    def _generate_code(
+        self,
+        request,
+        grounding,
+        conversation_context="",
+        simulation_spec=None,
+        simulation_spec_verification=None,
+    ):
+        if (simulation_spec_verification or {}).get("verdict") == "fail":
+            return {
+                "source": "simulation_spec_rejected",
+                "code": None,
+                "concept_answer": None,
+                "simulation_spec": simulation_spec,
+                "simulation_spec_verification": simulation_spec_verification,
+                "reason": "Simulation spec rejected before execution: "
+                + "; ".join((simulation_spec_verification or {}).get("issues") or []),
+            }
+
+        primitive_payload = build_demo_code(simulation_spec or {})
+        if primitive_payload["status"] == "ready":
+            return {
+                "source": "simulation_spec_primitive",
+                "code": primitive_payload["code"],
+                "concept_answer": None,
+                "simulation_spec": primitive_payload["spec"],
+                "simulation_spec_verification": simulation_spec_verification,
+                "reason": None,
+            }
+
         fallback = _fallback_python_demo_code(request)
         if not self.llm.available:
+            fallback["simulation_spec"] = simulation_spec
+            fallback["simulation_spec_verification"] = simulation_spec_verification
             return fallback
 
         response_text = self.llm.respond(
-            _code_prompt(request, self.agent_spec, grounding, conversation_context)
+            _code_prompt(
+                request,
+                self.agent_spec,
+                grounding,
+                conversation_context,
+                simulation_spec=simulation_spec,
+            )
         )
         parsed = _extract_json(response_text) or {}
         concept_answer = _clean_concept_answer(parsed.get("concept_answer"))
@@ -196,9 +258,13 @@ class LearningDemoAgent:
                 "source": "llm_generated",
                 "code": generated_code,
                 "concept_answer": concept_answer,
+                "simulation_spec": simulation_spec,
+                "simulation_spec_verification": simulation_spec_verification,
                 "reason": None,
             }
         fallback["concept_answer"] = concept_answer
+        fallback["simulation_spec"] = simulation_spec
+        fallback["simulation_spec_verification"] = simulation_spec_verification
         return fallback
 
     def _generate_concept_answer(self, request, grounding, conversation_context=""):
@@ -250,30 +316,6 @@ def _load_agent_spec():
     )
 
 
-def _intent_prompt(request):
-    return f"""
-Classify this scientific learning request for a product agent.
-
-Return only valid JSON with:
-- mode: "concept_explanation" or "python_demo"
-- reason: short string
-
-Use "concept_explanation" when the user asks a question, asks whether you know
-a topic, or asks to explain/teach a concept without explicitly asking for code,
-Python, a plot, a demo, a calculation, saved output, or execution.
-
-Use "python_demo" only when the user explicitly asks for runnable code, Python,
-a demo/demonstration, plotting, simulation, calculation, saving output, or to
-run something.
-
-User request:
-{request}
-
-Example:
-{{"mode": "concept_explanation", "reason": "user asks a concept question only"}}
-""".strip()
-
-
 def _concept_prompt(request, agent_spec, grounding, conversation_context=""):
     return f"""
 {agent_spec}
@@ -300,7 +342,7 @@ Grounding:
 """.strip()
 
 
-def _code_prompt(request, agent_spec, grounding, conversation_context=""):
+def _code_prompt(request, agent_spec, grounding, conversation_context="", simulation_spec=None):
     return f"""
 {agent_spec}
 
@@ -323,6 +365,8 @@ Rules:
 - do not put code inside concept_answer
 - use the local evidence to choose the equation or demonstration when available
 - if local evidence is weak or missing and you are uncertain, set code to null
+- prefer the simulation_spec when it is ready
+- if simulation_spec is unavailable, generate code only when you can still make a correct, topic-specific demo
 
 Learning request:
 {request}
@@ -332,6 +376,9 @@ Conversation context:
 
 Grounding:
 {json.dumps(grounding, indent=2)}
+
+Simulation spec:
+{json.dumps(simulation_spec or {}, indent=2)}
 
 Example JSON:
 {{
@@ -377,91 +424,10 @@ Tool result:
 
 
 def _fallback_python_demo_code(request):
-    lower_request = request.lower()
-    if "entropy" in lower_request:
-        return {"source": "known_template", "reason": None, "code": """
-import math
-import numpy as np
-import matplotlib.pyplot as plt
-
-def entropy_binary(p):
-    if p <= 0.0 or p >= 1.0:
-        return 0.0
-    return -(p * math.log2(p) + (1.0 - p) * math.log2(1.0 - p))
-
-probabilities = np.linspace(0.0, 1.0, 101)
-entropies = [entropy_binary(float(p)) for p in probabilities]
-max_index = int(np.argmax(entropies))
-
-print("Binary entropy demo")
-print(f"maximum entropy = {entropies[max_index]:.3f} bits at p = {probabilities[max_index]:.2f}")
-print(f"entropy at p=0.10 is {entropy_binary(0.10):.3f} bits")
-print(f"entropy at p=0.50 is {entropy_binary(0.50):.3f} bits")
-print("Interpretation: uncertainty is largest when the two outcomes are equally likely.")
-
-plt.figure(figsize=(6, 4))
-plt.plot(probabilities, entropies)
-plt.xlabel("Probability of heads")
-plt.ylabel("Entropy (bits)")
-plt.title("Binary entropy")
-plt.tight_layout()
-plt.savefig("demo.png", dpi=150)
-""".strip()}
-
-    if "diffusion" in lower_request or "random walk" in lower_request:
-        return {"source": "known_template", "reason": None, "code": """
-import numpy as np
-import matplotlib.pyplot as plt
-
-rng = np.random.default_rng(7)
-n_walkers = 2000
-n_steps = 300
-steps = rng.choice([-1, 1], size=(n_walkers, n_steps))
-positions = np.cumsum(steps, axis=1)
-times = np.arange(1, n_steps + 1)
-mean_squared_displacement = np.mean(positions**2, axis=0)
-
-fit_start = 50
-slope, intercept = np.polyfit(times[fit_start:], mean_squared_displacement[fit_start:], 1)
-
-print("Diffusion random-walk demo")
-print(f"walkers = {n_walkers}")
-print(f"steps per walker = {n_steps}")
-print(f"final mean squared displacement = {mean_squared_displacement[-1]:.2f}")
-print(f"MSD growth slope = {slope:.2f} per step")
-print("Interpretation: diffusion spreads because many random steps make the mean squared displacement grow approximately linearly with time.")
-
-plt.figure(figsize=(6, 4))
-plt.plot(times, mean_squared_displacement, label="simulation")
-plt.plot(times, slope * times + intercept, "--", label="linear fit")
-plt.xlabel("Step")
-plt.ylabel("Mean squared displacement")
-plt.title("1D random walk diffusion")
-plt.legend()
-plt.tight_layout()
-plt.savefig("demo.png", dpi=150)
-""".strip()}
-
     return {
         "source": "unavailable",
         "code": None,
-        "reason": "No reliable generated code or known template is available for this request.",
-    }
-
-
-def _fallback_intent(request):
-    if _has_explicit_execution_request(request):
-        return {
-            "mode": "python_demo",
-            "reason": "fallback classifier found an explicit code/demo/execution marker",
-            "needs_code": True,
-            "source": "fallback_rules",
-        }
-    return {
-        "mode": "concept_explanation",
-        "reason": "fallback classifier found no explicit code/demo/execution marker",
-        "needs_code": False,
-        "source": "fallback_rules",
+        "reason": "No reliable generated code or reusable simulation primitive is available for this request.",
     }
 
 
@@ -618,17 +584,6 @@ def _concept_lines(request):
         return [
             "This request was handled as a small safe Python calculation.",
             "The runner captures printed output and saves it as `stdout.txt`.",
-        ]
-    if "entropy" in lower_request:
-        return [
-            "Entropy is a measure of uncertainty. It is highest when outcomes",
-            "are equally likely and lower when one outcome is predictable.",
-        ]
-    if "diffusion" in lower_request or "random walk" in lower_request:
-        return [
-            "Diffusion is spreading caused by random motion. A random walk shows",
-            "the key behavior: mean squared displacement grows approximately",
-            "linearly with time.",
         ]
     return [
         "This learning request was handled by generating and running a small",

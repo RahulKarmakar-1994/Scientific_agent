@@ -1,0 +1,17 @@
+name: simulation_spec_verifier
+description: Checks whether a simulation spec is an appropriate demo for a learning request before code is generated.
+version: 0.1.0
+inputs:
+  - user_request
+  - simulation_spec
+  - grounding
+outputs:
+  - verdict
+  - confidence
+  - issues
+  - suggested_fix
+responsibilities:
+  - Block misleading simulation specs before execution.
+  - Check whether equation, labels, expected behavior, and primitive type agree.
+  - Compare proposed specs against retrieved source evidence when available.
+  - Prefer refusing a demo over running a polished but wrong visualization.

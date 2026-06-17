@@ -28,6 +28,14 @@ user message
    - run concise RAG searches
    - return grounded/weak/missing evidence
 -> specialized domain agent prompt
+-> SimulationSpecAgent, for runnable learning demos
+   - choose a reusable demo primitive
+   - produce structured scientific parameters
+-> SimulationSpecVerifierAgent
+   - block specs whose equation, labels, primitive, or expected behavior disagree
+-> demo_primitives
+   - build safe Python from generic primitives
+   - reject incomplete or inconsistent specs
 -> optional trusted tool execution
 -> PhysicsVerifierAgent
 -> final answer with sources, artifacts, and job id
@@ -40,6 +48,13 @@ user message
 - `RequestUnderstandingAgent`: converts natural language and short follow-ups
   into standalone requests and RAG search queries.
 - `GroundingService`: retrieves local evidence from the PDF/text index.
+- `SimulationSpecAgent`: maps a concept request to a reusable demo
+  specification instead of a topic-specific script.
+- `SimulationSpecVerifierAgent`: blocks misleading specs before code is
+  generated or executed.
+- `demo_primitives`: builds safe code from generic primitives such as
+  `relation_plot`, `random_walk`, `distribution`, `time_evolution`,
+  `multi_series_time_evolution`, and `phase_space`.
 - `LearningDemoAgent`: teaches concepts and, only when requested, generates and
   runs Python demos through the trusted runner.
 - `PhysicsVerifierAgent`: checks draft answers against evidence/tool results and
@@ -57,6 +72,8 @@ user message
 ## What Should Not Happen
 
 - Do not add one Python `if topic == ...` branch for every physics topic.
+- Do not treat reusable demo primitives as topic answers. They are execution
+  capabilities; the model/RAG layer must provide the scientific meaning.
 - Do not let the LLM execute arbitrary shell commands.
 - Do not present unverified generated code as trusted science.
 - Do not let old session context dominate a new self-contained question.
@@ -68,6 +85,7 @@ Some deterministic checks are product safety, not anti-agentic hardcoding:
 - code execution policy
 - import/call safety checks
 - JSON schema normalization
+- simulation-spec validation before code execution
 - job/session persistence
 - source citation formatting
 - fallback behavior when a local model returns invalid JSON

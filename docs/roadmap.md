@@ -23,13 +23,18 @@ The repo currently supports:
 - product-level specialized agents under `src/scientific_agent/agents/`
   - `RouterAgent`
   - `RequestUnderstandingAgent`
+  - `SimulationSpecAgent`
+  - `SimulationSpecVerifierAgent`
   - `LearningDemoAgent`
   - `SimulationAgent`
   - `RAGAgent`
   - `ScientificAgent`
 - Discovery-style physics learning agent spec under `agents/physics_learning/`
 - request-understanding agent spec under `agents/request_understanding/`
+- simulation-spec agent spec under `agents/simulation_spec/`
+- simulation-spec verifier spec under `agents/simulation_spec_verifier/`
 - reusable grounding/RAG retrieval service under `src/scientific_agent/core/grounding.py`
+- reusable demo primitives under `src/scientific_agent/core/demo_primitives.py`
 - job tracking under `outputs/jobs/<job_id>/`
 - honest unreliable-demo handling when generated code is not trustworthy
 - explanation-only learning mode for concept questions that do not explicitly
@@ -44,6 +49,8 @@ The repo currently supports:
   rewriting, with deterministic fallback only as a safety guardrail
 - deterministic verifier checks for obvious physics contradictions such as
   incorrect Newton's-third-law direction/formula claims
+- simulation-spec path for runnable demos:
+  `SimulationSpecAgent -> SimulationSpecVerifierAgent -> demo_primitives -> python_demo_runner`
 
 Useful smoke tests:
 

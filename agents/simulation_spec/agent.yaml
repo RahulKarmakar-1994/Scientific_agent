@@ -1,0 +1,21 @@
+name: simulation_spec
+description: Converts a learning request into a reusable scientific demo specification.
+version: 0.1.0
+inputs:
+  - user_request
+  - grounding
+  - conversation_context
+outputs:
+  - status
+  - concept
+  - demo_type
+  - relation_family
+  - parameters
+  - x_range
+  - labels
+  - expected_behavior
+responsibilities:
+  - Choose a reusable demo primitive rather than a topic-specific script.
+  - Use local source evidence when available.
+  - Return unavailable when a trustworthy primitive cannot represent the concept.
+  - Avoid writing Python code directly.

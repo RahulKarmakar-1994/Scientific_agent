@@ -20,7 +20,7 @@ class PhysicsVerifierAgent:
         if not parsed:
             return fallback
 
-        return _normalize_verification(parsed, fallback)
+        return _normalize_verification(parsed, fallback, result)
 
 
 def _load_verifier_spec():
@@ -156,7 +156,7 @@ def _physics_consistency_issues(final_answer):
     return issues
 
 
-def _normalize_verification(parsed, fallback):
+def _normalize_verification(parsed, fallback, result=None):
     verdict = str(parsed.get("verdict", fallback["verdict"])).lower()
     if verdict not in {"pass", "caution", "fail"}:
         verdict = fallback["verdict"]
@@ -168,6 +168,15 @@ def _normalize_verification(parsed, fallback):
     issues = _string_list(parsed.get("issues")) or fallback["issues"]
     supported_claims = _string_list(parsed.get("supported_claims"))
     unsupported_claims = _string_list(parsed.get("unsupported_claims"))
+
+    if _tool_completed(result or {}):
+        issues = _drop_false_tool_failure_claims(issues)
+        unsupported_claims = _drop_false_tool_failure_claims(unsupported_claims)
+        if not issues and not unsupported_claims:
+            verdict = fallback["verdict"]
+            confidence = fallback["confidence"]
+            issues = fallback["issues"]
+
     if fallback["verdict"] in {"caution", "fail"} and verdict == "pass":
         verdict = fallback["verdict"]
         confidence = fallback["confidence"]
@@ -188,6 +197,28 @@ def _normalize_verification(parsed, fallback):
         "suggested_note": suggested_note,
         "source": "llm",
     }
+
+
+def _tool_completed(result):
+    tool_result = (result or {}).get("result") or {}
+    return bool((result or {}).get("tool")) and tool_result.get("status") == "completed"
+
+
+def _drop_false_tool_failure_claims(items):
+    false_markers = [
+        "code execution failed",
+        "code failed",
+        "tool failed",
+        "tool/code demo did not complete",
+        "python demo output",
+    ]
+    cleaned = []
+    for item in items:
+        lower_item = item.lower()
+        if any(marker in lower_item for marker in false_markers):
+            continue
+        cleaned.append(item)
+    return cleaned
 
 
 def _suggested_note(verdict, issues):
