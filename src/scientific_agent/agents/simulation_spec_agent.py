@@ -34,6 +34,12 @@ class SimulationSpecAgent:
             )
 
         normalized = normalize_simulation_spec(parsed)
+        if normalized.get("status") != "ready" and _looks_like_schema_mismatch(parsed):
+            return _fallback_spec_from_request(
+                request,
+                grounding or {},
+                "Simulation spec model output was JSON but did not match the required schema.",
+            )
         normalized["source"] = "llm"
         return normalized
 
@@ -201,6 +207,15 @@ def _fallback_spec_from_request(request, grounding, reason):
     if normalized["status"] != "ready":
         normalized["model_error"] = reason
     return normalized
+
+
+def _looks_like_schema_mismatch(parsed):
+    if not isinstance(parsed, dict):
+        return True
+    required_signal = {"status", "demo_type", "concept"}
+    if required_signal & set(parsed):
+        return False
+    return True
 
 
 def _fallback_demo_fields(request, evidence_text):

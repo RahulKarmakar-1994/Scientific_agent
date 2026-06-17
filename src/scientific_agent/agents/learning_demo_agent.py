@@ -1,6 +1,7 @@
 import json
 from pathlib import Path
 
+from src.scientific_agent.agents.lesson_interaction_agent import LessonInteractionAgent
 from src.scientific_agent.agents.request_understanding_agent import RequestUnderstandingAgent
 from src.scientific_agent.agents.simulation_spec_agent import SimulationSpecAgent
 from src.scientific_agent.agents.simulation_spec_verifier_agent import (
@@ -38,9 +39,13 @@ class LearningDemoAgent:
             provider=provider,
             model=model,
         )
+        self.lesson_interaction_agent = LessonInteractionAgent(
+            provider=provider,
+            model=model,
+        )
         self.grounding_service = GroundingService(index_dir=index_dir)
 
-    def run(self, request, conversation_context=""):
+    def run(self, request, conversation_context="", learner_prediction=None):
         understanding = self.request_understanding_agent.run(request, conversation_context)
         prompt_context = conversation_context if understanding.get("uses_context") else ""
         intent = self._classify_intent(request)
@@ -88,6 +93,12 @@ class LearningDemoAgent:
         )
         if not code_payload["code"]:
             result = _unreliable_demo_result(request, code_payload["reason"])
+            lesson_interaction = self.lesson_interaction_agent.reflect(
+                request,
+                learner_prediction,
+                code_payload.get("simulation_spec") or simulation_spec,
+                result,
+            )
             return {
                 "agent": "learning_demo",
                 "status": "unreliable",
@@ -104,7 +115,14 @@ class LearningDemoAgent:
                 ),
                 "grounding": grounding,
                 "understanding": understanding,
-                "final_answer": _final_answer(request, result, concept_answer, grounding),
+                "lesson_interaction": lesson_interaction,
+                "final_answer": _final_answer(
+                    request,
+                    result,
+                    concept_answer,
+                    grounding,
+                    lesson_interaction=lesson_interaction,
+                ),
                 "llm": self._llm_status(),
             }
 
@@ -124,6 +142,12 @@ class LearningDemoAgent:
             code = repaired
             code_source = "llm_repaired"
 
+        lesson_interaction = self.lesson_interaction_agent.reflect(
+            request,
+            learner_prediction,
+            code_payload.get("simulation_spec") or simulation_spec,
+            result or {},
+        )
         return {
             "agent": "learning_demo",
             "status": result.get("status") if result else "failed",
@@ -141,7 +165,14 @@ class LearningDemoAgent:
             ),
             "grounding": grounding,
             "understanding": understanding,
-            "final_answer": _final_answer(request, result or {}, concept_answer, grounding),
+            "lesson_interaction": lesson_interaction,
+            "final_answer": _final_answer(
+                request,
+                result or {},
+                concept_answer,
+                grounding,
+                lesson_interaction=lesson_interaction,
+            ),
             "llm": self._llm_status(),
         }
 
@@ -496,7 +527,13 @@ def _clean_concept_answer(text):
     return cleaned or None
 
 
-def _final_answer(request, result, concept_answer=None, grounding=None):
+def _final_answer(
+    request,
+    result,
+    concept_answer=None,
+    grounding=None,
+    lesson_interaction=None,
+):
     concept_answer = (concept_answer or "").strip()
     if result.get("status") == "unreliable":
         lines = [f"Request: {request}"]
@@ -512,6 +549,7 @@ def _final_answer(request, result, concept_answer=None, grounding=None):
                 f"Reason: {result.get('reason')}",
             ]
         )
+        _add_lesson_interaction(lines, lesson_interaction)
         return _with_sources("\n".join(lines), grounding)
     if result.get("status") == "rejected":
         return _with_sources(
@@ -545,6 +583,7 @@ def _final_answer(request, result, concept_answer=None, grounding=None):
     if files:
         lines.extend(["", "Generated files:", *[f"- {path}" for path in files]])
     lines.extend(["", "This was run through the `python_demo_runner` plugin tool."])
+    _add_lesson_interaction(lines, lesson_interaction)
     return _with_sources("\n".join(lines), grounding)
 
 
@@ -576,6 +615,26 @@ def _with_sources(text, grounding):
                 f"(score {source['score']})"
             )
     return "\n".join(lines)
+
+
+def _add_lesson_interaction(lines, lesson_interaction):
+    if not lesson_interaction:
+        return
+    lines.extend(["", "Learning interaction:"])
+    prediction = lesson_interaction.get("learner_prediction")
+    if prediction:
+        lines.append(f"Prediction: {prediction}")
+        lines.append(f"Comparison: {lesson_interaction.get('comparison')}")
+        feedback = lesson_interaction.get("feedback")
+        if feedback:
+            lines.append(f"Feedback: {feedback}")
+    else:
+        question = lesson_interaction.get("prediction_question")
+        if question:
+            lines.append(f"Prediction prompt: {question}")
+    follow_up = lesson_interaction.get("follow_up_question")
+    if follow_up:
+        lines.append(f"Follow-up question: {follow_up}")
 
 
 def _concept_lines(request):

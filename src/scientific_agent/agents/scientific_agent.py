@@ -26,7 +26,7 @@ class ScientificAgent:
         self.rag_agent = RAGAgent(provider=provider, model=model, index_dir=index_dir)
         self.verifier_agent = PhysicsVerifierAgent(provider=provider, model=model)
 
-    def run(self, request, session_id=None):
+    def run(self, request, session_id=None, learner_prediction=None):
         conversation_context = ""
         if session_id:
             conversation_context = self.session_store.context_text(session_id)
@@ -55,6 +55,7 @@ class ScientificAgent:
             result = self.learning_agent.run(
                 request,
                 conversation_context=conversation_context,
+                learner_prediction=learner_prediction,
             )
 
         if route["route"] in {"learning_demo", "rag"}:

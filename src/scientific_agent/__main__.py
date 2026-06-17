@@ -39,14 +39,33 @@ def run_main(argv=None):
         default=None,
         help="Optional session id. When set, recent conversation is used as memory.",
     )
+    parser.add_argument(
+        "--predict",
+        default=None,
+        help="Optional learner prediction to compare against the demo result.",
+    )
+    parser.add_argument(
+        "--ask-prediction",
+        action="store_true",
+        help="Pause before running and ask for a learner prediction.",
+    )
     args = parser.parse_args(argv)
+
+    learner_prediction = args.predict
+    if args.ask_prediction and not learner_prediction:
+        print("Before I run the demo, what do you predict will happen?")
+        learner_prediction = input("> ").strip()
 
     report = ScientificAgent(
         provider=args.provider,
         model=args.model,
         engine=args.engine,
         index_dir=args.index_dir,
-    ).run(args.request, session_id=args.session_id)
+    ).run(
+        args.request,
+        session_id=args.session_id,
+        learner_prediction=learner_prediction,
+    )
     print(json.dumps(report, indent=2))
 
 

@@ -146,6 +146,8 @@ HTML = """<!doctype html>
         <option value="docker">docker</option>
         <option value="external-md">external-md</option>
       </select>
+      <label for="prediction">Prediction</label>
+      <textarea id="prediction" placeholder="Optional: what do you expect the demo to show?"></textarea>
       <p class="hint">Ask a concept question, then follow up with phrases like "show me the equation" or "demo it with Python".</p>
       <p id="status" class="status"></p>
     </aside>
@@ -190,12 +192,14 @@ HTML = """<!doctype html>
           headers: {'Content-Type': 'application/json'},
           body: JSON.stringify({
             message: text,
+            learner_prediction: document.getElementById('prediction').value.trim() || null,
             session_id: document.getElementById('session').value || 'physics-ui',
             provider: document.getElementById('provider').value,
             model: document.getElementById('model').value || null,
             engine: document.getElementById('engine').value
           })
         });
+        document.getElementById('prediction').value = '';
         const data = await response.json();
         if (!response.ok) throw new Error(data.error || 'Request failed');
         const result = data.result || {};
@@ -251,6 +255,7 @@ class ScientificAgentUIHandler(BaseHTTPRequestHandler):
             report = self._agent(payload).run(
                 payload.get("message", ""),
                 session_id=payload.get("session_id") or "physics-ui",
+                learner_prediction=payload.get("learner_prediction"),
             )
             self._send_json(200, report)
         except Exception as exc:
