@@ -184,11 +184,31 @@ def _fallback_spec_from_request(request, grounding, reason):
         for source in (grounding.get("sources") or [])[:3]
     )
     fields = _fallback_demo_fields(request, evidence_text)
+    if not fields.get("demo_type"):
+        return {
+            "status": "unavailable",
+            "concept": fields["concept"],
+            "demo_type": None,
+            "relation_family": None,
+            "parameters": {},
+            "x_range": [0.0, 10.0],
+            "x_label": fields["x_label"],
+            "y_label": fields["y_label"],
+            "title": fields["title"],
+            "equation_text": fields["equation_text"],
+            "expected_behavior": fields["expected_behavior"],
+            "reason": (
+                "No safe fallback demo primitive matched the request after the "
+                f"model returned an unusable simulation spec: {reason}"
+            ),
+            "source": "heuristic_fallback_from_request",
+            "model_error": reason,
+        }
     normalized = normalize_simulation_spec(
         {
             "status": "ready",
             "concept": fields["concept"],
-            "demo_type": "auto",
+            "demo_type": fields["demo_type"],
             "relation_family": None,
             "parameters": fields["parameters"],
             "x_range": [0.0, 10.0],
@@ -220,11 +240,31 @@ def _looks_like_schema_mismatch(parsed):
 
 def _fallback_demo_fields(request, evidence_text):
     concept = _short_concept(request)
-    quantity = _conserved_quantity(request) or _conserved_quantity(evidence_text)
+    request_text = str(request or "").lower()
+    if "random walk" in request_text or "diffusion" in request_text or "diffusive" in request_text:
+        return {
+            "concept": concept,
+            "demo_type": "random_walk",
+            "parameters": {
+                "walkers": 1000,
+                "steps": 300,
+            },
+            "x_label": "step",
+            "y_label": "mean squared displacement",
+            "title": _short_title(request),
+            "equation_text": "mean squared displacement grows approximately linearly with time",
+            "expected_behavior": (
+                f"{concept}: a collection of random walkers spreads out over time, "
+                "so the mean squared displacement increases with step number."
+            ),
+        }
+
+    quantity = _conserved_quantity(request)
     if quantity:
         quantity = quantity.replace("mechanical energy", "energy").strip()
         return {
             "concept": concept,
+            "demo_type": "multi_series_time_evolution",
             "parameters": {
                 "total": 10.0,
                 "exchange_amplitude": 4.0,
@@ -245,12 +285,13 @@ def _fallback_demo_fields(request, evidence_text):
 
     return {
         "concept": concept,
+        "demo_type": None,
         "parameters": {},
         "x_label": "time",
         "y_label": "quantity",
         "title": _short_title(request),
         "equation_text": "",
-        "expected_behavior": f"{request}. {evidence_text}",
+        "expected_behavior": request,
     }
 
 

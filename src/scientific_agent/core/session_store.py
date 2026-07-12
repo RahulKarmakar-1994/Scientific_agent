@@ -52,12 +52,36 @@ class SessionStore:
         text = "\n".join(lines)
         return text[-max_chars:]
 
+    def read_state(self, session_id, name):
+        path = self.session_dir(session_id) / f"{_safe_state_name(name)}.json"
+        if not path.exists():
+            return None
+        try:
+            return json.loads(path.read_text(encoding="utf-8"))
+        except json.JSONDecodeError:
+            return None
+
+    def write_state(self, session_id, name, payload):
+        path = self.session_dir(session_id) / f"{_safe_state_name(name)}.json"
+        path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+        return str(path)
+
+    def clear_state(self, session_id, name):
+        path = self.session_dir(session_id) / f"{_safe_state_name(name)}.json"
+        if path.exists():
+            path.unlink()
+
 
 def _safe_session_id(session_id):
     if not session_id:
         return "default"
     safe = re.sub(r"[^a-zA-Z0-9_.-]+", "-", str(session_id)).strip(".-")
     return safe or "default"
+
+
+def _safe_state_name(name):
+    safe = re.sub(r"[^a-zA-Z0-9_.-]+", "-", str(name or "")).strip(".-")
+    return safe or "state"
 
 
 def _compact_text(text, max_chars=500):

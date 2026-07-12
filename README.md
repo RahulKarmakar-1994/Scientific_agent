@@ -6,9 +6,8 @@ The project is currently one product with modular boundaries. The stable future
 namespace is `scientific_agent`; the original `md_agent` package remains as the
 working MD prototype and compatibility entrypoint.
 
-For the next implementation step, see `docs/roadmap.md`. The current planned
-step is dynamic tool/plugin loading so new tools can be added without editing
-the core agent code.
+For the current implementation state, see `docs/current_status.md`. For planned
+work, see `docs/roadmap.md`.
 
 Product architecture notes live in `docs/product_architecture.md`.
 
@@ -97,6 +96,22 @@ python -m src.scientific_agent chat \
   --model llama3.2:1b
 ```
 
+For demo requests in chat/UI mode, the agent now pauses before execution and
+asks for a prediction:
+
+```text
+> Teach me conservation of energy with a Python demo
+Before I run the demo, choose your prediction:
+A. The components change in opposite directions, but their total stays constant.
+B. Both components increase together, so the total increases.
+C. The total decreases because energy is used up.
+
+> A
+```
+
+The second turn runs the same prepared demo, compares the prediction with the
+tool output, and asks one follow-up question.
+
 Run the minimal local web UI:
 
 ```bash
@@ -150,6 +165,7 @@ GroundingService -> searches local RAG evidence for learning agents
 demo_primitives -> builds safe code from reusable demo specs, not topic templates
 JobStore -> saves request/result/report/artifacts per run
 SessionStore -> preserves multi-turn context by session id
+SessionStore pending state -> pauses demo execution until the learner predicts
 ```
 
 `LearningDemoAgent` has two modes:
@@ -186,8 +202,17 @@ agents/physics_learning/
   system_prompt.md
 ```
 
-This keeps product instructions separate from Python orchestration code, similar
-to the Discovery catalog pattern.
+The product catalog also describes orchestration, retrieval, simulation,
+verification, lesson interaction, and the `physics-learning` starter kit:
+
+```text
+agents/*/agent.yaml
+tools/*/tool.yaml
+starter_kits/physics-learning/kit.json
+```
+
+This keeps product instructions and capabilities separate from Python
+orchestration code, similar to the Discovery catalog pattern.
 
 The learning agent also searches the local RAG index before answering. Its
 result includes a grounding status:

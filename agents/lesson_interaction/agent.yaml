@@ -1,0 +1,22 @@
+name: lesson_interaction
+version: 0.1.0
+category: pedagogy
+description: Manages prediction-before-demo choices and reflection-after-demo feedback.
+entrypoint: src.scientific_agent.agents.lesson_interaction_agent:LessonInteractionAgent
+inputs:
+  - user_request
+  - simulation_spec
+  - learner_prediction
+  - tool_result
+outputs:
+  - prediction
+  - comparison
+  - feedback
+  - follow_up_question
+responsibilities:
+  - Ask learners to predict demo behavior before execution.
+  - Compare the learner prediction with completed demo output.
+  - Produce concise feedback and one follow-up question.
+limitations:
+  - Uses generic choices tied to reusable demo primitives.
+  - Does not grade a learner when demo execution fails.

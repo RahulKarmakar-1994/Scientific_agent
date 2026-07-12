@@ -92,10 +92,10 @@ def _structural_verification(request, spec):
             )
         )
 
-    if _has_unrelated_equation_terms(request, equation_text, x_label, y_label):
-        issues.append(
-            "The proposed equation/axis labels appear weakly related to the requested concept."
-        )
+        if _has_unrelated_equation_terms(request, equation_text, x_label, y_label):
+            issues.append(
+                "The proposed equation/axis labels appear weakly related to the requested concept."
+            )
 
     if issues:
         return {

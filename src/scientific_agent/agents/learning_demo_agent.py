@@ -45,7 +45,13 @@ class LearningDemoAgent:
         )
         self.grounding_service = GroundingService(index_dir=index_dir)
 
-    def run(self, request, conversation_context="", learner_prediction=None):
+    def run(
+        self,
+        request,
+        conversation_context="",
+        learner_prediction=None,
+        prepared_simulation_spec=None,
+    ):
         understanding = self.request_understanding_agent.run(request, conversation_context)
         prompt_context = conversation_context if understanding.get("uses_context") else ""
         intent = self._classify_intent(request)
@@ -70,7 +76,7 @@ class LearningDemoAgent:
                 "error": "python_demo_runner tool is not available",
             }
 
-        simulation_spec = self.simulation_spec_agent.run(
+        simulation_spec = prepared_simulation_spec or self.simulation_spec_agent.run(
             request,
             grounding=grounding,
             conversation_context=prompt_context,
@@ -173,6 +179,69 @@ class LearningDemoAgent:
                 grounding,
                 lesson_interaction=lesson_interaction,
             ),
+            "llm": self._llm_status(),
+        }
+
+    def prepare_prediction(self, request, conversation_context=""):
+        understanding = self.request_understanding_agent.run(request, conversation_context)
+        prompt_context = conversation_context if understanding.get("uses_context") else ""
+        grounding = self.grounding_service.retrieve(
+            request,
+            prompt_context,
+            search_queries=understanding.get("search_queries"),
+        )
+        simulation_spec = self.simulation_spec_agent.run(
+            request,
+            grounding=grounding,
+            conversation_context=prompt_context,
+        )
+        if simulation_spec.get("status") != "ready":
+            result = _unreliable_demo_result(
+                request,
+                simulation_spec.get("reason")
+                or "No reliable simulation spec was available for this request.",
+            )
+            concept_answer = _clean_concept_answer(
+                self._generate_concept_answer(request, grounding, prompt_context)
+            )
+            return {
+                "agent": "learning_demo",
+                "status": "unreliable",
+                "request": request,
+                "tool": "python_demo_runner",
+                "attempts": [],
+                "generated_code": None,
+                "result": result,
+                "concept_answer": concept_answer,
+                "simulation_spec": simulation_spec,
+                "prediction": None,
+                "grounding": grounding,
+                "understanding": understanding,
+                "final_answer": _final_answer(
+                    request,
+                    result,
+                    concept_answer,
+                    grounding,
+                ),
+                "llm": self._llm_status(),
+            }
+        prediction = self.lesson_interaction_agent.prediction_choices(
+            request,
+            simulation_spec=simulation_spec,
+        )
+        final_answer = _prediction_prompt_text(request, prediction, grounding)
+        return {
+            "agent": "learning_demo",
+            "status": "awaiting_prediction",
+            "request": request,
+            "tool": None,
+            "attempts": [],
+            "generated_code": None,
+            "simulation_spec": simulation_spec,
+            "prediction": prediction,
+            "grounding": grounding,
+            "understanding": understanding,
+            "final_answer": final_answer,
             "llm": self._llm_status(),
         }
 
@@ -485,12 +554,10 @@ def _has_explicit_execution_request(request):
 def _fallback_concept_answer(request):
     return (
         f"Request: {request}\n\n"
-        "Yes, I can help with this as a scientific learning question. In the "
-        "current local setup, I can answer conceptually and, when you explicitly "
-        "ask for a Python demo or plot, I can try to generate and run code in the "
-        "trusted demo runner. For broad physics topics, the next product step is "
-        "to connect this explanation path to a physics-book RAG index so answers "
-        "are grounded in your chosen sources."
+        "I could not get a model-generated explanation for this request in the "
+        "current run. I will avoid inventing a detailed lesson. If you asked for "
+        "a demo, I will only run it when the request maps to a reliable verified "
+        "demo spec or trusted code path."
     )
 
 
@@ -615,6 +682,26 @@ def _with_sources(text, grounding):
                 f"(score {source['score']})"
             )
     return "\n".join(lines)
+
+
+def _prediction_prompt_text(request, prediction, grounding=None):
+    lines = [
+        f"Request: {request}",
+        "",
+        prediction.get("question") or "Before I run the demo, choose your prediction:",
+    ]
+    for option in prediction.get("options") or []:
+        lines.append(f"{option.get('id')}. {option.get('text')}")
+    reason = prediction.get("reason")
+    if reason:
+        lines.extend(["", f"Why I am asking: {reason}"])
+    lines.extend(
+        [
+            "",
+            "Reply with A, B, C, or your own prediction. I will run the demo after that.",
+        ]
+    )
+    return _with_sources("\n".join(lines), grounding)
 
 
 def _add_lesson_interaction(lines, lesson_interaction):

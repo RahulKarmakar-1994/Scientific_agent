@@ -1,0 +1,21 @@
+name: router_agent
+version: 0.1.0
+category: orchestration
+description: Routes a scientific request to learning, simulation, or local-document answering.
+entrypoint: src.scientific_agent.agents.router_agent:RouterAgent
+inputs:
+  - user_request
+outputs:
+  - route
+  - reason
+routes:
+  - learning_demo
+  - simulation
+  - rag
+responsibilities:
+  - Choose the first product path for a user request.
+  - Keep routing lightweight and explainable.
+  - Default exploratory science questions to the learning path.
+limitations:
+  - Uses simple route markers today.
+  - Does not execute tools or answer the scientific question.

@@ -1,0 +1,26 @@
+name: simulation_agent
+version: 0.1.0
+category: simulation
+description: Runs the molecular-dynamics setup, execution, and analysis workflow.
+entrypoint: src.scientific_agent.agents.simulation_agent:SimulationAgent
+inputs:
+  - user_request
+outputs:
+  - config
+  - knowledge_evidence
+  - md_result
+  - analysis
+  - final_answer
+tools:
+  - md_docker_tool
+  - external_md_tool
+  - knowledge_search_tool
+  - md_analysis_tool
+responsibilities:
+  - Parse a natural-language MD request into a structured config.
+  - Retrieve local MD evidence when useful.
+  - Run the configured simulation through the selected engine.
+  - Summarize simulation stability and outputs.
+limitations:
+  - Current local runner is a toy MD workflow.
+  - Production MD engines should be added as manifest-backed tools.

@@ -111,6 +111,8 @@ def normalize_simulation_spec(spec):
     if demo_type == "relation_plot" and relation_family == "inverse_square":
         x_range[0] = max(abs(x_range[0]), 0.1)
         x_range[1] = max(abs(x_range[1]), x_range[0] + 1.0)
+    if demo_type == "multi_series_time_evolution":
+        parameters = _multi_series_parameters(parameters)
 
     return {
         "status": "ready",
@@ -126,6 +128,29 @@ def normalize_simulation_spec(spec):
         "expected_behavior": _short_text(spec.get("expected_behavior"), ""),
         "reason": _short_text(spec.get("reason"), "Spec produced by model."),
     }
+
+
+def _multi_series_parameters(parameters):
+    parameters = dict(parameters or {})
+    total = abs(_number(parameters.get("total"), 10.0))
+    if total <= 1e-9:
+        total = 10.0
+
+    exchange = abs(_number(parameters.get("exchange_amplitude"), min(4.0, total / 2.5)))
+    if exchange <= 1e-9:
+        exchange = min(4.0, total / 2.5)
+    exchange = min(exchange, total / 2.0)
+
+    angular_frequency = abs(
+        _number(parameters.get("angular_frequency"), _number(parameters.get("frequency"), 1.0))
+    )
+    if angular_frequency <= 1e-9:
+        angular_frequency = 1.0
+
+    parameters["total"] = total
+    parameters["exchange_amplitude"] = exchange
+    parameters["angular_frequency"] = angular_frequency
+    return parameters
 
 
 def _relation_plot_code(spec):

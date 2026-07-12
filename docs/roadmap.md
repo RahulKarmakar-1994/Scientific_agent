@@ -43,6 +43,11 @@ The repo currently supports:
 - grounding status in learning results: `grounded`, `weak`, or `missing`
 - session memory under `outputs/sessions/<session_id>/messages.jsonl`
 - interactive chat mode through `python -m src.scientific_agent chat`
+- chat/UI prediction-before-demo loop:
+  - demo request creates A/B/C prediction choices
+  - pending demo state is stored under the session
+  - learner reply runs the same prepared simulation spec
+  - result includes prediction comparison, feedback, and a follow-up question
 - minimal web UI through `python -m src.scientific_agent ui`
 - `PhysicsVerifierAgent` with verdict/confidence/issues on learning and RAG answers
 - model-driven request understanding for follow-up detection and RAG query
@@ -67,6 +72,16 @@ python -m src.scientific_agent chat \
   --provider ollama \
   --model llama3.2:1b
 ```
+
+In chat mode, try:
+
+```text
+Teach me conservation of energy with a Python demo
+A
+```
+
+The first turn should ask for a prediction. The second turn should run the demo
+and compare the selected prediction with the result.
 
 ```bash
 python -m src.scientific_agent \
@@ -199,13 +214,15 @@ agent startup
 
 Apply the Discovery-style catalog pattern locally:
 
-1. Add catalog manifests for remaining current product agents.
-2. Upgrade `tools/python_demo_runner/tool.yaml` with version, category, actions,
+1. [x] Add catalog manifests for remaining current product agents.
+2. [x] Upgrade `tools/python_demo_runner/tool.yaml` with version, category, actions,
    input schema, and output schema.
-3. Add a `starter_kits/physics-learning/kit.json` with sample prompts.
-4. Improve `PhysicsVerifierAgent` with stricter source-claim checking and
+3. [x] Add a `starter_kits/physics-learning/kit.json` with sample prompts.
+4. [ ] Improve `PhysicsVerifierAgent` with stricter source-claim checking and
    formula/code consistency checks.
-5. Add session summaries so long chats do not need to pass the full recent
+5. [ ] Add answer repair so weak model explanations are rewritten from RAG evidence,
+   simulation spec, and tool output before the final response is shown.
+6. [ ] Add session summaries so long chats do not need to pass the full recent
    message history forever.
 
 Then finish the plugin system by converting one existing MD/RAG path into a

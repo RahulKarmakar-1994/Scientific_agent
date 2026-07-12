@@ -23,6 +23,84 @@ class LessonInteractionAgent:
             "constant, or oscillate?"
         )
 
+    def prediction_choices(self, request, simulation_spec=None):
+        """Return generic prediction choices for an upcoming demo."""
+
+        spec = simulation_spec or {}
+        demo_type = str(spec.get("demo_type") or "").lower()
+        concept = spec.get("concept") or _short_request(request)
+        if demo_type == "multi_series_time_evolution":
+            return {
+                "question": "Before I run the demo, choose your prediction:",
+                "options": [
+                    {
+                        "id": "A",
+                        "text": (
+                            "The components change in opposite directions, but "
+                            "their total stays constant."
+                        ),
+                        "is_expected": True,
+                    },
+                    {
+                        "id": "B",
+                        "text": "Both components increase together, so the total increases.",
+                        "is_expected": False,
+                    },
+                    {
+                        "id": "C",
+                        "text": "The total decreases because energy is used up.",
+                        "is_expected": False,
+                    },
+                ],
+                "reason": f"{concept} is represented as exchange with a conserved total.",
+            }
+        if demo_type == "random_walk":
+            return {
+                "question": "Before I run the demo, choose your prediction:",
+                "options": [
+                    {
+                        "id": "A",
+                        "text": "The mean squared displacement grows with step number.",
+                        "is_expected": True,
+                    },
+                    {
+                        "id": "B",
+                        "text": "The walkers remain near exactly the starting point.",
+                        "is_expected": False,
+                    },
+                    {
+                        "id": "C",
+                        "text": "The mean squared displacement steadily decreases.",
+                        "is_expected": False,
+                    },
+                ],
+                "reason": f"{concept} is represented as random-walk spreading.",
+            }
+        if demo_type == "relation_plot":
+            return _relation_prediction_choices(request, spec)
+
+        return {
+            "question": self.prediction_question(request, simulation_spec),
+            "options": [
+                {
+                    "id": "A",
+                    "text": "The plotted or printed quantity follows the expected trend.",
+                    "is_expected": True,
+                },
+                {
+                    "id": "B",
+                    "text": "The quantity changes in the opposite direction.",
+                    "is_expected": False,
+                },
+                {
+                    "id": "C",
+                    "text": "Nothing changes during the demo.",
+                    "is_expected": False,
+                },
+            ],
+            "reason": "Generic prediction choices were used for this demo primitive.",
+        }
+
     def reflect(self, request, learner_prediction, simulation_spec=None, tool_result=None):
         prediction = str(learner_prediction or "").strip()
         if not prediction:
@@ -184,6 +262,35 @@ def _fallback_follow_up(request, simulation_spec):
     if demo_type == "relation_plot":
         return f"For {concept}, what would change if the main parameter were doubled?"
     return f"What assumption in this {concept} demo is most important for the result?"
+
+
+def _relation_prediction_choices(request, spec):
+    family = str(spec.get("relation_family") or "").lower()
+    concept = spec.get("concept") or _short_request(request)
+    if family == "inverse_square":
+        expected = "As x increases, y decreases strongly."
+        wrong_one = "As x increases, y increases linearly."
+    elif family == "quadratic":
+        expected = "The curve bends because y changes roughly with x squared."
+        wrong_one = "The relation is a perfectly flat horizontal line."
+    elif family == "threshold_linear":
+        expected = "The response is small before a threshold and then grows."
+        wrong_one = "The response is equally large below and above the threshold."
+    elif family == "sinusoidal":
+        expected = "The value oscillates up and down."
+        wrong_one = "The value only increases and never turns back."
+    else:
+        expected = "The output follows the plotted relationship between x and y."
+        wrong_one = "The output is unrelated to x."
+    return {
+        "question": "Before I run the demo, choose your prediction:",
+        "options": [
+            {"id": "A", "text": expected, "is_expected": True},
+            {"id": "B", "text": wrong_one, "is_expected": False},
+            {"id": "C", "text": "The demo will produce no measurable trend.", "is_expected": False},
+        ],
+        "reason": f"{concept} is represented as a {family or 'relation'} plot.",
+    }
 
 
 def _expected_behavior(simulation_spec):

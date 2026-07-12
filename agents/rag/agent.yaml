@@ -1,0 +1,21 @@
+name: rag_agent
+version: 0.1.0
+category: retrieval
+description: Answers questions from the local scientific document index.
+entrypoint: src.scientific_agent.agents.rag_agent:RAGAgent
+inputs:
+  - user_request
+  - top_k
+outputs:
+  - answer
+  - evidence
+  - llm
+tools:
+  - rag_search_tool
+responsibilities:
+  - Search the local PDF/text index for relevant evidence.
+  - Answer only from retrieved evidence when an LLM is available.
+  - Report missing or insufficient evidence instead of guessing.
+limitations:
+  - Requires an ingested local index for grounded answers.
+  - Retrieval quality depends on the current lightweight local RAG index.

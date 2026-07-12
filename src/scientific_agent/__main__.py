@@ -117,6 +117,13 @@ def chat_main(argv=None):
         report = agent.run(request, session_id=args.session_id)
         result = report.get("result", {})
         print(result.get("final_answer") or result.get("answer") or json.dumps(report, indent=2))
+        llm = result.get("llm") or {}
+        if llm.get("error") and not llm.get("last_successful_model"):
+            print(
+                "\nLLM warning: the requested model did not return a response, "
+                "so fallback rules were used."
+            )
+            print(f"Reason: {llm.get('error')}")
         print(f"\n[job: {report['job_id']}]\n")
 
 

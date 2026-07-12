@@ -1,4 +1,6 @@
 name: python_demo_runner
+version: 0.1.0
+category: learning_demo
 description: Runs a short trusted Python learning demo and returns stdout, generated files, and safety notes.
 type: command
 command: python tools/python_demo_runner/run.py
@@ -12,3 +14,54 @@ outputs:
 execution:
   type: command
   timeout_seconds: 15
+risk:
+  level: medium
+  notes:
+    - Executes locally after AST safety checks.
+    - Intended for short educational demos, not untrusted workloads.
+actions:
+  - name: run_demo
+    description: Validate and run a short Python demo submitted as JSON.
+    input_schema:
+      type: object
+      required:
+        - code
+      properties:
+        topic:
+          type: string
+          description: Short topic label for the demo.
+        code:
+          type: string
+          description: Python code using the runner's allowed imports and calls.
+    output_schema:
+      type: object
+      required:
+        - status
+        - topic
+      properties:
+        status:
+          type: string
+          enum:
+            - completed
+            - failed
+            - rejected
+        topic:
+          type: string
+        returncode:
+          type: integer
+        stdout:
+          type: string
+        stderr:
+          type: string
+        generated_files:
+          type: array
+          items:
+            type: string
+        safety_notes:
+          type: array
+          items:
+            type: string
+        safety_errors:
+          type: array
+          items:
+            type: string

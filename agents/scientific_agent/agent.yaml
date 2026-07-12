@@ -1,0 +1,32 @@
+name: scientific_agent
+version: 0.1.0
+category: product_orchestration
+description: Top-level product agent for scientific learning, retrieval, simulation, verification, jobs, and sessions.
+entrypoint: src.scientific_agent.agents.scientific_agent:ScientificAgent
+inputs:
+  - user_request
+  - session_id
+  - learner_prediction
+outputs:
+  - job_id
+  - route
+  - result
+  - report
+sub_agents:
+  - router_agent
+  - request_understanding
+  - physics_learning
+  - simulation_agent
+  - rag_agent
+  - physics_verifier
+tools:
+  - python_demo_runner
+  - rag_search_tool
+responsibilities:
+  - Orchestrate the product request loop.
+  - Persist job reports and artifacts.
+  - Preserve session memory and pending prediction state.
+  - Verify learning and retrieval answers before final presentation.
+limitations:
+  - Long-session summarization is still planned.
+  - Weak answers are cautioned but not fully repaired yet.

@@ -28,9 +28,28 @@ class ScientificAgent:
 
     def run(self, request, session_id=None, learner_prediction=None):
         conversation_context = ""
+        pending_demo = None
+        original_user_request = request
         if session_id:
             conversation_context = self.session_store.context_text(session_id)
             self.session_store.append_message(session_id, "user", request)
+            pending_demo = self.session_store.read_state(session_id, "pending_demo")
+
+        if pending_demo:
+            if _is_cancel_request(request):
+                self.session_store.clear_state(session_id, "pending_demo")
+                return self._record_simple_response(
+                    request,
+                    session_id,
+                    "Cancelled the pending demo. You can ask a new question whenever you are ready.",
+                    status="cancelled",
+                )
+            learner_prediction = learner_prediction or _prediction_from_reply(
+                request,
+                pending_demo.get("prediction") or {},
+            )
+            request = pending_demo.get("request") or request
+            self.session_store.clear_state(session_id, "pending_demo")
 
         job_id, job_dir = self.job_store.create(request)
         if session_id:
@@ -40,6 +59,8 @@ class ScientificAgent:
                 {
                     "session_id": session_id,
                     "conversation_context": conversation_context,
+                    "original_user_request": original_user_request,
+                    "pending_demo_resumed": bool(pending_demo),
                 },
             )
 
@@ -47,7 +68,29 @@ class ScientificAgent:
         route = self.router.route(routing_request)
         self.job_store.write_json(job_dir, "route.json", route)
 
-        if route["route"] == "simulation":
+        if (
+            session_id
+            and not pending_demo
+            and not learner_prediction
+            and route["route"] == "learning_demo"
+            and _should_pause_for_prediction(request)
+        ):
+            result = self.learning_agent.prepare_prediction(
+                request,
+                conversation_context=conversation_context,
+            )
+            if result.get("status") == "awaiting_prediction":
+                self.session_store.write_state(
+                    session_id,
+                    "pending_demo",
+                    {
+                        "request": request,
+                        "route": route,
+                        "prediction": result.get("prediction") or {},
+                        "simulation_spec": result.get("simulation_spec") or {},
+                    },
+                )
+        elif route["route"] == "simulation":
             result = self.simulation_agent.run(request)
         elif route["route"] == "rag":
             result = self.rag_agent.run(request)
@@ -56,9 +99,10 @@ class ScientificAgent:
                 request,
                 conversation_context=conversation_context,
                 learner_prediction=learner_prediction,
+                prepared_simulation_spec=(pending_demo or {}).get("simulation_spec"),
             )
 
-        if route["route"] in {"learning_demo", "rag"}:
+        if route["route"] in {"learning_demo", "rag"} and result.get("status") != "awaiting_prediction":
             verification = self.verifier_agent.run(request, result)
             result["verification"] = verification
             result["final_answer"] = _append_verification_note(
@@ -104,6 +148,42 @@ class ScientificAgent:
             )
         return report
 
+    def _record_simple_response(self, request, session_id, answer, status="answered"):
+        job_id, job_dir = self.job_store.create(request)
+        route = {"route": "learning_demo", "reason": "session control response"}
+        result = {
+            "agent": "scientific_agent",
+            "status": status,
+            "request": request,
+            "final_answer": answer,
+        }
+        self.job_store.write_json(job_dir, "route.json", route)
+        self.job_store.write_json(job_dir, "result.json", result)
+        self.job_store.write_text(job_dir, "report.md", answer)
+        if session_id:
+            self.session_store.append_message(
+                session_id,
+                "assistant",
+                answer,
+                metadata={
+                    "job_id": job_id,
+                    "job_dir": str(job_dir),
+                    "route": route,
+                    "status": status,
+                },
+            )
+        return {
+            "job_id": job_id,
+            "job_dir": str(job_dir),
+            "session_id": session_id,
+            "request": request,
+            "route": route,
+            "provider": self.provider,
+            "model": self.model,
+            "engine": self.engine,
+            "result": result,
+        }
+
 
 def _generated_files(result):
     files = []
@@ -147,3 +227,38 @@ def _append_verification_note(answer, verification):
     if not note:
         note = f"Verifier verdict: {verdict}, confidence: {confidence}."
     return f"{answer.rstrip()}\n\nVerification: {verdict} ({confidence})\n{note}"
+
+
+def _should_pause_for_prediction(request):
+    lower_request = str(request or "").lower()
+    return any(
+        marker in lower_request
+        for marker in [
+            "demo",
+            "demonstrate",
+            "plot",
+            "python",
+            "simulate",
+            "simulation",
+        ]
+    )
+
+
+def _prediction_from_reply(reply, prediction):
+    text = str(reply or "").strip()
+    normalized = text.rstrip(".:").strip().upper()
+    if len(normalized) == 1:
+        for option in prediction.get("options") or []:
+            if str(option.get("id") or "").upper() == normalized:
+                return option.get("text") or text
+    return text
+
+
+def _is_cancel_request(request):
+    return str(request or "").strip().lower() in {
+        "cancel",
+        "stop",
+        "skip",
+        "never mind",
+        "nevermind",
+    }

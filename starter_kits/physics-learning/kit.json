@@ -1,0 +1,56 @@
+{
+  "name": "physics-learning",
+  "version": "0.1.0",
+  "description": "Starter kit for grounded physics explanations, prediction-before-demo learning, and safe Python demonstrations.",
+  "category": "learning",
+  "agents": [
+    "scientific_agent",
+    "router_agent",
+    "request_understanding",
+    "physics_learning",
+    "simulation_spec",
+    "simulation_spec_verifier",
+    "lesson_interaction",
+    "rag_agent",
+    "physics_verifier"
+  ],
+  "tools": [
+    "python_demo_runner",
+    "rag_search_tool"
+  ],
+  "sample_prompts": [
+    {
+      "title": "Concept explanation",
+      "prompt": "Explain entropy in statistical mechanics.",
+      "expected_route": "learning_demo",
+      "expected_behavior": "Return a grounded explanation without running code unless a demo is requested."
+    },
+    {
+      "title": "Prediction-first demo",
+      "prompt": "Teach me conservation of energy with a Python demo.",
+      "expected_route": "learning_demo",
+      "expected_behavior": "Ask for a learner prediction before running the prepared demo in chat or UI mode."
+    },
+    {
+      "title": "Local source answer",
+      "prompt": "What do my local notes say about diffusion?",
+      "expected_route": "rag",
+      "expected_behavior": "Search the local RAG index and answer only from retrieved evidence."
+    }
+  ],
+  "expected_flow": [
+    "route request",
+    "rewrite follow-up when session context exists",
+    "retrieve local grounding",
+    "draft explanation or demo spec",
+    "verify spec before demo execution",
+    "run trusted tool only when requested",
+    "verify final answer",
+    "persist job report and artifacts"
+  ],
+  "limitations": [
+    "Requires local source ingestion for grounded textbook-style citations.",
+    "The Python demo runner is a local safety layer, not a hardened sandbox.",
+    "Weak or unsupported answers are cautioned today; automatic answer repair is planned."
+  ]
+}

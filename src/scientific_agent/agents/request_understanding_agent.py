@@ -24,6 +24,10 @@ class RequestUnderstandingAgent:
             )
             if parsed:
                 understood = _normalize_understanding(parsed, request, source="llm")
+                if not conversation_context:
+                    understood["uses_context"] = False
+                    if _mentions_prior_context(understood.get("reason")):
+                        understood["reason"] = "self-contained request understood by model"
                 if not _is_untrustworthy_context_resolution(
                     understood,
                     request,
@@ -169,6 +173,21 @@ def _dedupe_search_queries(search_queries):
             seen.add(key)
             deduped.append(normalized)
     return deduped
+
+
+def _mentions_prior_context(text):
+    lowered = str(text or "").lower()
+    return any(
+        marker in lowered
+        for marker in [
+            "follow-up",
+            "followup",
+            "prior",
+            "previous",
+            "resolved from",
+            "conversation",
+        ]
+    )
 
 
 def _last_user_message(conversation_context):
