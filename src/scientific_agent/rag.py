@@ -26,7 +26,7 @@ def main():
     answer_parser.add_argument("--top-k", type=int, default=5)
     answer_parser.add_argument(
         "--provider",
-        choices=["gemini", "openai", "ollama"],
+        choices=["gemini", "groq", "openai", "ollama"],
         default="ollama",
         help="LLM provider used to synthesize the answer.",
     )

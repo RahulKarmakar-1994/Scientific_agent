@@ -136,6 +136,7 @@ HTML = """<!doctype html>
       <select id="provider">
         <option value="ollama">ollama</option>
         <option value="gemini">gemini</option>
+        <option value="groq">groq</option>
         <option value="openai">openai</option>
       </select>
       <label for="model">Model</label>
@@ -300,7 +301,7 @@ def main(argv=None):
     parser = argparse.ArgumentParser(description="Run the Scientific Agent web UI.")
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=8765)
-    parser.add_argument("--provider", default="ollama", choices=["ollama", "gemini", "openai"])
+    parser.add_argument("--provider", default="ollama", choices=["ollama", "gemini", "groq", "openai"])
     parser.add_argument("--model", default="llama3.2:1b")
     parser.add_argument("--engine", default="local", choices=["local", "docker", "external-md"])
     parser.add_argument("--index-dir", default=".vector_store")

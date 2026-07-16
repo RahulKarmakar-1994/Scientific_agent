@@ -309,6 +309,16 @@ export OPENAI_API_KEY="your_api_key_here"
 python -m src.md_agent.agent --provider openai "Design an NPT MD run for water at 300 K"
 ```
 
+Or use Groq's hosted OpenAI-compatible API:
+
+```bash
+export GROQ_API_KEY="your_api_key_here"
+python -m src.scientific_agent chat \
+  --session physics-groq \
+  --provider groq \
+  --model llama-3.3-70b-versatile
+```
+
 Or run the same workflow with a local Ollama model:
 
 ```bash

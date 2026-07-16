@@ -11,6 +11,7 @@ The repo currently supports:
 - provider-flexible LLM calls through `LLMClient`
   - `ollama`
   - `gemini`
+  - `groq`
   - `openai`
 - deterministic MD workflow mode
 - portable tool-agent mode where the LLM proposes a trusted tool plan

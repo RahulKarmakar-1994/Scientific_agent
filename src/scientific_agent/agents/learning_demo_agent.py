@@ -580,6 +580,7 @@ def _clean_concept_answer(text):
                 "to demonstrate",
                 "here is",
                 "here's",
+                "please let me know",
                 "now, i",
                 "now i",
                 "we can use",

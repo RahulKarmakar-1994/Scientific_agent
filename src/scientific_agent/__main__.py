@@ -22,7 +22,7 @@ def run_main(argv=None):
     parser.add_argument("request", help="Natural-language scientific request")
     parser.add_argument(
         "--provider",
-        choices=["ollama", "gemini", "openai"],
+        choices=["ollama", "gemini", "groq", "openai"],
         default="ollama",
         help="LLM provider for planning/generation/reporting.",
     )
@@ -80,7 +80,7 @@ def chat_main(argv=None):
     )
     parser.add_argument(
         "--provider",
-        choices=["ollama", "gemini", "openai"],
+        choices=["ollama", "gemini", "groq", "openai"],
         default="ollama",
         help="LLM provider for planning/generation/reporting.",
     )

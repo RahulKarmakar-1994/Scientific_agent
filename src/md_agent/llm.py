@@ -18,6 +18,8 @@ class LLMClient:
 
         if self.provider == "gemini":
             self._init_gemini()
+        elif self.provider == "groq":
+            self._init_groq()
         elif self.provider == "openai":
             self._init_openai()
         elif self.provider == "ollama":
@@ -85,6 +87,16 @@ class LLMClient:
         except ImportError:
             self.error = "openai package is not installed"
 
+    def _init_groq(self):
+        if not os.getenv("GROQ_API_KEY"):
+            self.error = "GROQ_API_KEY is not set"
+            return
+
+        self.client = {
+            "api_key": os.getenv("GROQ_API_KEY"),
+            "base_url": os.getenv("GROQ_BASE_URL", "https://api.groq.com/openai/v1").rstrip("/"),
+        }
+
     def _init_ollama(self):
         self.client = {
             "base_url": os.getenv("OLLAMA_BASE_URL", "http://127.0.0.1:11434").rstrip("/")
@@ -144,6 +156,9 @@ class LLMClient:
             )
             return response.output_text
 
+        if self.provider == "groq":
+            return self._groq_response(prompt, model)
+
         if self.provider == "ollama":
             return self._ollama_response(prompt, model)
 
@@ -174,10 +189,42 @@ class LLMClient:
             raise RuntimeError(data["error"])
         return data.get("response", "")
 
+    def _groq_response(self, prompt, model):
+        payload = json.dumps(
+            {
+                "model": model,
+                "messages": [{"role": "user", "content": prompt}],
+            }
+        ).encode("utf-8")
+        request = urlrequest.Request(
+            f"{self.client['base_url']}/chat/completions",
+            data=payload,
+            headers={
+                "Authorization": f"Bearer {self.client['api_key']}",
+                "Accept": "application/json",
+                "Content-Type": "application/json",
+                "User-Agent": "md-agent-workbench/0.1",
+            },
+            method="POST",
+        )
+
+        try:
+            with urlrequest.urlopen(request, timeout=120) as response:
+                data = json.loads(response.read().decode("utf-8"))
+        except urlerror.HTTPError as exc:
+            body = exc.read().decode("utf-8", errors="replace")
+            raise RuntimeError(f"Groq request failed: HTTP {exc.code}: {body}") from exc
+        except urlerror.URLError as exc:
+            raise RuntimeError(f"Groq request failed: {exc}") from exc
+
+        return (((data.get("choices") or [{}])[0].get("message") or {}).get("content") or "")
+
 
 def _default_model(provider):
     if provider == "gemini":
         return os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
+    if provider == "groq":
+        return os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile")
     if provider == "openai":
         return os.getenv("OPENAI_MODEL", "gpt-5.2")
     if provider == "ollama":
@@ -188,6 +235,8 @@ def _default_model(provider):
 def _candidate_models(provider, primary_model):
     if provider == "gemini":
         raw = os.getenv("GEMINI_FALLBACK_MODELS", "")
+    elif provider == "groq":
+        raw = os.getenv("GROQ_FALLBACK_MODELS", "")
     elif provider == "openai":
         raw = os.getenv("OPENAI_FALLBACK_MODELS", "")
     elif provider == "ollama":

@@ -82,7 +82,7 @@ def main():
     )
     parser.add_argument(
         "--provider",
-        choices=["gemini", "openai", "ollama"],
+        choices=["gemini", "groq", "openai", "ollama"],
         default="gemini",
         help="LLM provider to use when LLM mode is enabled.",
     )

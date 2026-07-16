@@ -7,7 +7,7 @@ learning and molecular-dynamics workbench. It is not yet a polished product.
 
 ## What Works Now
 
-- Provider-flexible LLM client for Ollama, Gemini, and OpenAI-compatible runs.
+- Provider-flexible LLM client for Ollama, Gemini, Groq, and OpenAI-compatible runs.
 - Top-level `ScientificAgent` entrypoint with routing across:
   - physics learning/demo requests
   - molecular simulation requests
