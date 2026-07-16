@@ -88,6 +88,7 @@ class ScientificAgent:
                         "route": route,
                         "prediction": result.get("prediction") or {},
                         "simulation_spec": result.get("simulation_spec") or {},
+                        "rich_demo_plan": result.get("rich_demo_plan") or {},
                     },
                 )
         elif route["route"] == "simulation":
@@ -100,6 +101,7 @@ class ScientificAgent:
                 conversation_context=conversation_context,
                 learner_prediction=learner_prediction,
                 prepared_simulation_spec=(pending_demo or {}).get("simulation_spec"),
+                prepared_rich_demo_plan=(pending_demo or {}).get("rich_demo_plan"),
             )
 
         if route["route"] in {"learning_demo", "rag"} and result.get("status") != "awaiting_prediction":

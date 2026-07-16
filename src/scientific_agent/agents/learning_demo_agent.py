@@ -51,6 +51,7 @@ class LearningDemoAgent:
         conversation_context="",
         learner_prediction=None,
         prepared_simulation_spec=None,
+        prepared_rich_demo_plan=None,
     ):
         understanding = self.request_understanding_agent.run(request, conversation_context)
         prompt_context = conversation_context if understanding.get("uses_context") else ""
@@ -92,6 +93,7 @@ class LearningDemoAgent:
             prompt_context,
             simulation_spec=simulation_spec,
             simulation_spec_verification=simulation_spec_verification,
+            rich_demo_plan=prepared_rich_demo_plan,
         )
         concept_answer = _clean_concept_answer(
             code_payload.get("concept_answer")
@@ -119,6 +121,7 @@ class LearningDemoAgent:
                     code_payload.get("simulation_spec_verification")
                     or simulation_spec_verification
                 ),
+                "rich_demo_plan": code_payload.get("rich_demo_plan") or prepared_rich_demo_plan,
                 "grounding": grounding,
                 "understanding": understanding,
                 "lesson_interaction": lesson_interaction,
@@ -169,6 +172,7 @@ class LearningDemoAgent:
                 code_payload.get("simulation_spec_verification")
                 or simulation_spec_verification
             ),
+            "rich_demo_plan": code_payload.get("rich_demo_plan") or prepared_rich_demo_plan,
             "grounding": grounding,
             "understanding": understanding,
             "lesson_interaction": lesson_interaction,
@@ -196,6 +200,34 @@ class LearningDemoAgent:
             conversation_context=prompt_context,
         )
         if simulation_spec.get("status") != "ready":
+            if self.llm.available and _has_explicit_execution_request(request):
+                rich_demo_plan = self._generate_rich_demo_plan(
+                    request,
+                    grounding,
+                    prompt_context,
+                    simulation_spec,
+                )
+                prediction = _prediction_from_rich_demo_plan(
+                    request,
+                    simulation_spec,
+                    rich_demo_plan,
+                )
+                final_answer = _prediction_prompt_text(request, prediction, grounding)
+                return {
+                    "agent": "learning_demo",
+                    "status": "awaiting_prediction",
+                    "request": request,
+                    "tool": None,
+                    "attempts": [],
+                    "generated_code": None,
+                    "simulation_spec": simulation_spec,
+                    "rich_demo_plan": rich_demo_plan,
+                    "prediction": prediction,
+                    "grounding": grounding,
+                    "understanding": understanding,
+                    "final_answer": final_answer,
+                    "llm": self._llm_status(),
+                }
             result = _unreliable_demo_result(
                 request,
                 simulation_spec.get("reason")
@@ -312,6 +344,7 @@ class LearningDemoAgent:
         conversation_context="",
         simulation_spec=None,
         simulation_spec_verification=None,
+        rich_demo_plan=None,
     ):
         if (simulation_spec_verification or {}).get("verdict") == "fail":
             return {
@@ -320,6 +353,7 @@ class LearningDemoAgent:
                 "concept_answer": None,
                 "simulation_spec": simulation_spec,
                 "simulation_spec_verification": simulation_spec_verification,
+                "rich_demo_plan": rich_demo_plan,
                 "reason": "Simulation spec rejected before execution: "
                 + "; ".join((simulation_spec_verification or {}).get("issues") or []),
             }
@@ -332,6 +366,7 @@ class LearningDemoAgent:
                 "concept_answer": None,
                 "simulation_spec": primitive_payload["spec"],
                 "simulation_spec_verification": simulation_spec_verification,
+                "rich_demo_plan": rich_demo_plan,
                 "reason": None,
             }
 
@@ -348,6 +383,7 @@ class LearningDemoAgent:
                 grounding,
                 conversation_context,
                 simulation_spec=simulation_spec,
+                rich_demo_plan=rich_demo_plan,
             )
         )
         parsed = _extract_json(response_text) or {}
@@ -360,11 +396,13 @@ class LearningDemoAgent:
                 "concept_answer": concept_answer,
                 "simulation_spec": simulation_spec,
                 "simulation_spec_verification": simulation_spec_verification,
+                "rich_demo_plan": rich_demo_plan,
                 "reason": None,
             }
         fallback["concept_answer"] = concept_answer
         fallback["simulation_spec"] = simulation_spec
         fallback["simulation_spec_verification"] = simulation_spec_verification
+        fallback["rich_demo_plan"] = rich_demo_plan
         return fallback
 
     def _generate_concept_answer(self, request, grounding, conversation_context=""):
@@ -375,6 +413,23 @@ class LearningDemoAgent:
             if answer:
                 return _clean_concept_answer(answer)
         return _fallback_concept_answer(request)
+
+    def _generate_rich_demo_plan(self, request, grounding, conversation_context, simulation_spec):
+        if self.llm.available:
+            parsed = _extract_json(
+                self.llm.respond(
+                    _rich_demo_plan_prompt(
+                        request,
+                        grounding,
+                        conversation_context,
+                        simulation_spec,
+                    )
+                )
+            )
+            plan = _normalize_rich_demo_plan(parsed, request, simulation_spec)
+            if plan:
+                return plan
+        return _fallback_rich_demo_plan(request, simulation_spec)
 
     def _repair_code(self, request, code, result):
         if not self.llm.available:
@@ -442,7 +497,14 @@ Grounding:
 """.strip()
 
 
-def _code_prompt(request, agent_spec, grounding, conversation_context="", simulation_spec=None):
+def _code_prompt(
+    request,
+    agent_spec,
+    grounding,
+    conversation_context="",
+    simulation_spec=None,
+    rich_demo_plan=None,
+):
     return f"""
 {agent_spec}
 
@@ -467,6 +529,10 @@ Rules:
 - if local evidence is weak or missing and you are uncertain, set code to null
 - prefer the simulation_spec when it is ready
 - if simulation_spec is unavailable, generate code only when you can still make a correct, topic-specific demo
+- if rich_demo_plan is provided, treat it as the contract for the demo
+- do not ask whether the user wants the demo; this request is already approved for execution
+- save every plot requested in rich_demo_plan
+- do not call plt.show()
 
 Learning request:
 {request}
@@ -480,12 +546,63 @@ Grounding:
 Simulation spec:
 {json.dumps(simulation_spec or {}, indent=2)}
 
+Rich demo plan:
+{json.dumps(rich_demo_plan or {}, indent=2)}
+
 Example JSON:
 {{
   "concept_answer": "Multiplication combines equal groups. Here the requested calculation is 3 times 5.",
   "demo_plan": "Compute the product and print the numeric result.",
   "code": "result = 3 * 5\\nprint(f'3 * 5 = {{result}}')"
 }}
+""".strip()
+
+
+def _rich_demo_plan_prompt(request, grounding, conversation_context="", simulation_spec=None):
+    return f"""
+Create a structured plan for an interactive scientific Python demo.
+
+Return only valid JSON with:
+{{
+  "learning_goal": "what the learner should understand",
+  "simulation_model": "short model description",
+  "prediction_question": "one question to ask before running the demo",
+  "prediction_options": [
+    {{"id": "A", "text": "option text", "is_expected": true}},
+    {{"id": "B", "text": "option text", "is_expected": false}},
+    {{"id": "C", "text": "option text", "is_expected": false}}
+  ],
+  "expected_behavior": "what the plots/stdout should show",
+  "plots": [
+    {{"filename": "plot_name.png", "description": "what this plot reveals"}}
+  ],
+  "parameters": {{"short_name": "value or meaning"}},
+  "code_requirements": [
+    "specific runnable-code requirement"
+  ],
+  "result_interpretation_goals": [
+    "what the final explanation should connect back to"
+  ]
+}}
+
+Rules:
+- Do not write Python code here.
+- Keep the plan specific enough that a code generator can implement it.
+- Use only local file outputs such as PNG plots and printed stdout.
+- Prefer simple robust simulations over fragile advanced numerics.
+- Include exactly three prediction options.
+
+User request:
+{request}
+
+Conversation context:
+{conversation_context or "(none)"}
+
+Simulation spec:
+{json.dumps(simulation_spec or {}, indent=2)}
+
+Grounding:
+{json.dumps(grounding, indent=2)}
 """.strip()
 
 
@@ -705,6 +822,186 @@ def _prediction_prompt_text(request, prediction, grounding=None):
     return _with_sources("\n".join(lines), grounding)
 
 
+def _normalize_rich_demo_plan(parsed, request, simulation_spec):
+    if not isinstance(parsed, dict):
+        return None
+
+    plan = {
+        "learning_goal": _short_plan_text(
+            parsed.get("learning_goal"),
+            f"Understand {request} through a runnable simulation.",
+        ),
+        "simulation_model": _short_plan_text(
+            parsed.get("simulation_model"),
+            (simulation_spec or {}).get("reason") or "Custom scientific simulation.",
+        ),
+        "prediction_question": _short_plan_text(
+            parsed.get("prediction_question"),
+            "Before running the demo, what trend do you expect to see?",
+        ),
+        "prediction_options": _normalize_prediction_options(parsed.get("prediction_options")),
+        "expected_behavior": _short_plan_text(
+            parsed.get("expected_behavior"),
+            (simulation_spec or {}).get("expected_behavior")
+            or "The simulation output should reveal the requested physical behavior.",
+        ),
+        "plots": _normalize_plots(parsed.get("plots")),
+        "parameters": parsed.get("parameters") if isinstance(parsed.get("parameters"), dict) else {},
+        "code_requirements": _string_list(parsed.get("code_requirements")),
+        "result_interpretation_goals": _string_list(parsed.get("result_interpretation_goals")),
+        "source": "llm",
+    }
+    if not plan["prediction_options"]:
+        plan["prediction_options"] = _fallback_prediction_options()
+    if not plan["plots"]:
+        plan["plots"] = [{"filename": "demo.png", "description": "Main demo result."}]
+    return plan
+
+
+def _fallback_rich_demo_plan(request, simulation_spec):
+    return {
+        "learning_goal": f"Understand {request} through a runnable simulation.",
+        "simulation_model": (simulation_spec or {}).get("reason") or "Custom scientific simulation.",
+        "prediction_question": "Before running the demo, what trend do you expect to see?",
+        "prediction_options": _fallback_prediction_options(),
+        "expected_behavior": (
+            (simulation_spec or {}).get("expected_behavior")
+            or "The simulation should evolve toward the requested physical pattern."
+        ),
+        "plots": [{"filename": "demo.png", "description": "Main demo result."}],
+        "parameters": {},
+        "code_requirements": [
+            "Use only allowed imports.",
+            "Print a concise numerical summary.",
+            "Save plots as PNG files.",
+            "Do not call plt.show().",
+        ],
+        "result_interpretation_goals": [
+            "Connect the plotted trend to the learner prediction.",
+        ],
+        "source": "fallback",
+    }
+
+
+def _prediction_from_rich_demo_plan(request, simulation_spec, rich_demo_plan):
+    options = _normalize_prediction_options((rich_demo_plan or {}).get("prediction_options"))
+    if not options:
+        options = _fallback_prediction_options()
+    return {
+        "question": (
+            (rich_demo_plan or {}).get("prediction_question")
+            or "Before I generate and run the rich demo, choose your prediction:"
+        ),
+        "options": options,
+        "reason": (
+            (rich_demo_plan or {}).get("expected_behavior")
+            or (simulation_spec or {}).get("expected_behavior")
+            or (simulation_spec or {}).get("reason")
+            or "the system should evolve toward the pattern described by the demo"
+        ),
+        "source": (rich_demo_plan or {}).get("source") or "rich_demo_plan",
+    }
+
+
+def _custom_demo_prediction_choices(request, simulation_spec):
+    behavior = (
+        (simulation_spec or {}).get("expected_behavior")
+        or (simulation_spec or {}).get("reason")
+        or "the system should evolve toward the pattern described by the demo"
+    )
+    return {
+        "question": "Before I generate and run the rich demo, choose your prediction:",
+        "options": [
+            {
+                "id": "A",
+                "text": "The system relaxes toward a stable pattern rather than staying in its initial state.",
+                "is_expected": True,
+            },
+            {
+                "id": "B",
+                "text": "The system remains essentially unchanged throughout the simulation.",
+                "is_expected": False,
+            },
+            {
+                "id": "C",
+                "text": "The output becomes purely random with no interpretable trend.",
+                "is_expected": False,
+            },
+        ],
+        "reason": behavior,
+        "source": "custom_demo_policy",
+    }
+
+
+def _normalize_prediction_options(raw_options):
+    if not isinstance(raw_options, list):
+        return []
+    options = []
+    for index, option in enumerate(raw_options[:3]):
+        if isinstance(option, dict):
+            text = str(option.get("text") or "").strip()
+            option_id = str(option.get("id") or chr(ord("A") + index)).strip().upper()[:1]
+            is_expected = bool(option.get("is_expected"))
+        else:
+            text = str(option or "").strip()
+            option_id = chr(ord("A") + index)
+            is_expected = index == 0
+        if text:
+            options.append({"id": option_id, "text": text, "is_expected": is_expected})
+    if options and not any(option.get("is_expected") for option in options):
+        options[0]["is_expected"] = True
+    return options
+
+
+def _fallback_prediction_options():
+    return [
+        {
+            "id": "A",
+            "text": "The system relaxes toward a stable pattern rather than staying in its initial state.",
+            "is_expected": True,
+        },
+        {
+            "id": "B",
+            "text": "The system remains essentially unchanged throughout the simulation.",
+            "is_expected": False,
+        },
+        {
+            "id": "C",
+            "text": "The output becomes purely random with no interpretable trend.",
+            "is_expected": False,
+        },
+    ]
+
+
+def _normalize_plots(raw_plots):
+    if not isinstance(raw_plots, list):
+        return []
+    plots = []
+    for plot in raw_plots[:6]:
+        if isinstance(plot, dict):
+            filename = str(plot.get("filename") or "").strip()
+            description = str(plot.get("description") or "").strip()
+        else:
+            filename = str(plot or "").strip()
+            description = ""
+        if filename:
+            plots.append({"filename": filename, "description": description})
+    return plots
+
+
+def _string_list(value):
+    if isinstance(value, list):
+        return [str(item).strip() for item in value if str(item).strip()]
+    if isinstance(value, str) and value.strip():
+        return [value.strip()]
+    return []
+
+
+def _short_plan_text(value, fallback):
+    text = str(value or "").strip()
+    return text[:1200] if text else fallback
+
+
 def _add_lesson_interaction(lines, lesson_interaction):
     if not lesson_interaction:
         return
@@ -783,6 +1080,9 @@ def _extract_generated_code(text):
         generated_code = str(generated_code)
     if generated_code:
         return generated_code
+    loose_code = _extract_loose_code_field(text)
+    if loose_code:
+        return loose_code
     return _extract_fenced_code(text)
 
 
@@ -794,9 +1094,39 @@ def _extract_fenced_code(text):
         block = parts[index].strip()
         if block.startswith("python"):
             block = block[len("python") :].strip()
+        elif block.startswith("json"):
+            block = _extract_loose_code_field(block) or ""
         if block:
             return block
     return None
+
+
+def _extract_loose_code_field(text):
+    if not text or '"code"' not in text:
+        return None
+
+    marker_index = text.find('"code"')
+    colon_index = text.find(":", marker_index)
+    if colon_index < 0:
+        return None
+
+    value = text[colon_index + 1 :].lstrip()
+    if not value.startswith('"'):
+        return None
+
+    value = value[1:]
+    end_markers = ['"\n}', '"\n,', '"\r\n}', '"\r\n,']
+    end_positions = [value.find(marker) for marker in end_markers]
+    end_positions = [position for position in end_positions if position >= 0]
+    if not end_positions:
+        return None
+
+    raw_code = value[: min(end_positions)]
+    try:
+        decoded = json.loads(f'"{raw_code}"')
+    except json.JSONDecodeError:
+        decoded = raw_code
+    return decoded.strip() or None
 
 
 def _looks_relevant(request, code):
